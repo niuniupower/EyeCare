@@ -1,0 +1,23 @@
+<Window x:Class="EyeCare.Core.BreakWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None" AllowsTransparency="True" ResizeMode="NoResize"
+        ShowInTaskbar="False" ShowActivated="False" Topmost="True"
+        Background="Transparent" FontFamily="Microsoft YaHei UI, Segoe UI">
+    <Grid Background="#F2121318">
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+            <TextBlock Text="👀" FontSize="52" HorizontalAlignment="Center" Margin="0,0,0,22"/>
+            <TextBlock x:Name="TimeText" Text="0:20" FontSize="96" FontWeight="Light"
+                       Foreground="#FFF5B24E" HorizontalAlignment="Center"/>
+            <TextBlock Text="请远眺 6 米外的景物，让眼睛放松一下"
+                       FontSize="17" Foreground="#FFC9CBD3" HorizontalAlignment="Center" Margin="0,14,0,0"/>
+            <Border Width="340" Height="4" CornerRadius="2" Background="#FF2E3138"
+                    HorizontalAlignment="Center" Margin="0,30,0,0">
+                <Border x:Name="Ring" Width="0" HorizontalAlignment="Left" CornerRadius="2" Background="#FFF5B24E"/>
+            </Border>
+            <Button x:Name="SkipBtn" Content="跳过休息" Style="{StaticResource Btn}"
+                    Width="130" Margin="0,34,0,0" HorizontalAlignment="Center"
+                    Click="Skip_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

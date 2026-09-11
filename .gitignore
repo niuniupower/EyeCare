@@ -1,0 +1,19 @@
+# 构建产物
+bin/
+obj/
+dist/
+publish/
+*.zip
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+
+# 运行时产物
+*.log
+
+# 系统
+Thumbs.db
+.DS_Store

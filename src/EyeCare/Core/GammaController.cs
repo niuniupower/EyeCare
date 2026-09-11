@@ -1,0 +1,202 @@
+using System.Runtime.InteropServices;
+
+namespace EyeCare.Core;
+
+public static class GammaNative
+{
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RAMP
+    {
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 256)] public ushort[] Red = new ushort[256];
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 256)] public ushort[] Green = new ushort[256];
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 256)] public ushort[] Blue = new ushort[256];
+        public RAMP() { }
+    }
+
+    [DllImport("gdi32.dll")]
+    public static extern bool SetDeviceGammaRamp(IntPtr hDC, ref RAMP lpRamp);
+
+    [DllImport("gdi32.dll")]
+    public static extern bool GetDeviceGammaRamp(IntPtr hDC, ref RAMP lpRamp);
+
+    [DllImport("gdi32.dll", CharSet = CharSet.Unicode)]
+    public static extern IntPtr CreateDCW(string? lpszDriver, string lpszDevice, string? lpszOutput, IntPtr lpInitData);
+
+    [DllImport("gdi32.dll")]
+    public static extern bool DeleteDC(IntPtr hdc);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct DISPLAY_DEVICE
+    {
+        public int cb;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string DeviceName = "";
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceString = "";
+        public int StateFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceID = "";
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string DeviceKey = "";
+        public DISPLAY_DEVICE() { }
+    }
+
+    public const int DISPLAY_DEVICE_ATTACHED_TO_DESKTOP = 0x1;
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern bool EnumDisplayDevices(string? lpDevice, int iDevNum, ref DISPLAY_DEVICE lpDisplayDevice, int dwFlags);
+}
+
+/// <summary>
+/// GPU 级屏幕校色:通过 SetDeviceGammaRamp 直接改写显卡输出查找表(LUT)。
+/// 画面在信号输出前已完成调整,因此截图软件截到的像素不受影响,文字保持锐利。
+/// </summary>
+public sealed class GammaController : IDisposable
+{
+    public sealed class MonitorHandle
+    {
+        public required string DeviceName { get; init; }
+        public required string Description { get; init; }
+        public IntPtr Dc { get; set; }
+        public ushort[]? OriginalRed;
+        public ushort[]? OriginalGreen;
+        public ushort[]? OriginalBlue;
+        public bool OriginalSaved;
+    }
+
+    public List<MonitorHandle> Monitors { get; } = new();
+
+    public void RefreshMonitors()
+    {
+        foreach (var m in Monitors)
+            if (m.Dc != IntPtr.Zero)
+                GammaNative.DeleteDC(m.Dc);
+        Monitors.Clear();
+
+        var dev = new GammaNative.DISPLAY_DEVICE();
+        for (int i = 0; i < 64; i++)
+        {
+            dev = new GammaNative.DISPLAY_DEVICE();
+            dev.cb = Marshal.SizeOf<GammaNative.DISPLAY_DEVICE>();
+            if (!GammaNative.EnumDisplayDevices(null, i, ref dev, 0))
+                break;
+            if ((dev.StateFlags & GammaNative.DISPLAY_DEVICE_ATTACHED_TO_DESKTOP) == 0)
+                continue;
+
+            var dc = GammaNative.CreateDCW(null, dev.DeviceName, null, IntPtr.Zero);
+            if (dc == IntPtr.Zero) continue;
+
+            var mh = new MonitorHandle { DeviceName = dev.DeviceName, Description = dev.DeviceString, Dc = dc };
+            SaveOriginal(mh);
+            Monitors.Add(mh);
+        }
+        Logger.Info($"显示器枚举: {Monitors.Count} 个 [{string.Join(", ", Monitors.Select(m => m.DeviceName))}]");
+    }
+
+    private static void SaveOriginal(MonitorHandle m)
+    {
+        var r = new GammaNative.RAMP();
+        if (GammaNative.GetDeviceGammaRamp(m.Dc, ref r))
+        {
+            m.OriginalRed = r.Red;
+            m.OriginalGreen = r.Green;
+            m.OriginalBlue = r.Blue;
+            m.OriginalSaved = true;
+        }
+        else
+        {
+            Logger.Error($"读取原始 gamma 失败: {m.DeviceName}");
+        }
+    }
+
+    /// <summary>
+    /// 应用色温(K)与亮度(0..1)。返回是否全部显示器都成功(GPU 级生效)。
+    /// Windows 会校验 LUT 偏离程度,过暗或过偏会被拒绝 —— 失败时调用方应回退为遮罩层。
+    /// </summary>
+    public bool Apply(double kelvin, double brightness)
+    {
+        var (r, g, b) = KelvinToChannels(kelvin);
+        bool allOk = Monitors.Count > 0;
+        foreach (var m in Monitors)
+        {
+            var ramp = new GammaNative.RAMP();
+            for (int i = 0; i < 256; i++)
+            {
+                ushort baseV = (ushort)Math.Clamp(Math.Round(65535.0 * (i / 255.0) * brightness), 0, 65535);
+                ramp.Red[i] = (ushort)Math.Clamp((long)baseV * r, 0, 65535);
+                ramp.Green[i] = (ushort)Math.Clamp((long)baseV * g, 0, 65535);
+                ramp.Blue[i] = (ushort)Math.Clamp((long)baseV * b, 0, 65535);
+            }
+            bool ok = GammaNative.SetDeviceGammaRamp(m.Dc, ref ramp);
+            if (ok) ok = Verify(m, ramp);
+            if (!ok)
+            {
+                allOk = false;
+                Logger.Info($"gamma 写入被系统拒绝: {m.DeviceName}");
+            }
+        }
+        return allOk;
+    }
+
+    private static bool Verify(MonitorHandle m, GammaNative.RAMP ramp)
+    {
+        var rb = new GammaNative.RAMP();
+        if (!GammaNative.GetDeviceGammaRamp(m.Dc, ref rb)) return false;
+        int[] pts = { 0, 64, 128, 255 };
+        foreach (var i in pts)
+        {
+            if (Math.Abs((int)rb.Red[i] - (int)ramp.Red[i]) > 2048) return false;
+            if (Math.Abs((int)rb.Green[i] - (int)ramp.Green[i]) > 2048) return false;
+            if (Math.Abs((int)rb.Blue[i] - (int)ramp.Blue[i]) > 2048) return false;
+        }
+        return true;
+    }
+
+    /// <summary>恢复所有显示器的原始 gamma</summary>
+    public void RestoreAll()
+    {
+        foreach (var m in Monitors)
+        {
+            GammaNative.RAMP r;
+            if (m.OriginalSaved)
+            {
+                r = new GammaNative.RAMP { Red = m.OriginalRed!, Green = m.OriginalGreen!, Blue = m.OriginalBlue! };
+            }
+            else
+            {
+                r = new GammaNative.RAMP();
+                for (int i = 0; i < 256; i++)
+                {
+                    ushort v = (ushort)(65535.0 * i / 255.0);
+                    r.Red[i] = v; r.Green[i] = v; r.Blue[i] = v;
+                }
+            }
+            GammaNative.SetDeviceGammaRamp(m.Dc, ref r);
+        }
+    }
+
+    /// <summary>色温 → RGB 通道系数(Tanner Helland 近似,各分量 0..1)</summary>
+    public static (double r, double g, double b) KelvinToChannels(double kelvin)
+    {
+        double t = Math.Clamp(kelvin, 1000, 40000) / 100.0;
+        double r, g, b;
+        if (t <= 66) r = 255;
+        else r = 329.698727446 * Math.Pow(t - 60, -0.1332047592);
+
+        if (t <= 66) g = 99.4708025861 * Math.Log(t) - 161.1195681661;
+        else g = 288.1221695283 * Math.Pow(t - 60, -0.0755148492);
+
+        if (t >= 66) b = 255;
+        else if (t <= 19) b = 0;
+        else b = 138.5177312231 * Math.Log(t - 10) - 305.0447927307;
+
+        r = Math.Clamp(r, 0, 255) / 255.0;
+        g = Math.Clamp(g, 0, 255) / 255.0;
+        b = Math.Clamp(b, 0, 255) / 255.0;
+        return (r, g, b);
+    }
+
+    public void Dispose()
+    {
+        foreach (var m in Monitors)
+            if (m.Dc != IntPtr.Zero)
+                GammaNative.DeleteDC(m.Dc);
+        Monitors.Clear();
+    }
+}
