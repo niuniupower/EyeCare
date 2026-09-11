@@ -122,24 +122,46 @@ public sealed class TrayService : IDisposable
         _icon.ShowBalloonTip(4000);
     }
 
+    /// <summary>托盘图标:与主图标同款的「半落日」设计;滤光开启=琥珀色,关闭=灰色</summary>
     private static Icon MakeIcon(bool filterOn)
     {
-        var color = filterOn ? Color.FromArgb(245, 178, 78) : Color.FromArgb(128, 132, 142);
+        var sun = filterOn ? Color.FromArgb(255, 205, 130, 70) : Color.FromArgb(128, 134, 145);
         using var bmp = new Bitmap(32, 32);
         using (var g = Graphics.FromImage(bmp))
         {
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            using var bg = new SolidBrush(Color.FromArgb(30, 32, 40));
-            g.FillEllipse(bg, 0, 0, 31, 31);
-            using var pen = new Pen(color, 2.6f);
-            pen.StartCap = System.Drawing.Drawing2D.LineCap.Round;
-            pen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
-            g.DrawArc(pen, 3, 6, 26, 20, 15, 150);
-            g.DrawArc(pen, 3, 6, 26, 20, 195, 150);
-            using var iris = new SolidBrush(color);
-            g.FillEllipse(iris, 12, 11, 8, 8);
-            using var pupil = new SolidBrush(Color.FromArgb(30, 32, 40));
-            g.FillEllipse(pupil, 14.5f, 13.5f, 3, 3);
+
+            // 深色圆角方底
+            using (var bgPath = new System.Drawing.Drawing2D.GraphicsPath())
+            {
+                bgPath.AddArc(2, 2, 10, 10, 180, 90);
+                bgPath.AddArc(20, 2, 10, 10, 270, 90);
+                bgPath.AddArc(20, 20, 10, 10, 0, 90);
+                bgPath.AddArc(2, 20, 10, 10, 90, 90);
+                bgPath.CloseFigure();
+                using var bg = new SolidBrush(Color.FromArgb(32, 34, 42));
+                g.FillPath(bg, bgPath);
+            }
+
+            // 半落日(地平线 y=21 以下裁掉)
+            g.SetClip(new Rectangle(0, 0, 32, 21));
+            using var sunBrush = new SolidBrush(sun);
+            g.FillEllipse(sunBrush, 8, 6, 16, 16);
+            g.ResetClip();
+
+            // 倒影波纹两条
+            using (var pen1 = new Pen(Color.FromArgb(150, sun), 2.4f))
+            {
+                pen1.StartCap = System.Drawing.Drawing2D.LineCap.Round;
+                pen1.EndCap = System.Drawing.Drawing2D.LineCap.Round;
+                g.DrawLine(pen1, 10, 25, 22, 25);
+            }
+            using (var pen2 = new Pen(Color.FromArgb(80, sun), 2.4f))
+            {
+                pen2.StartCap = System.Drawing.Drawing2D.LineCap.Round;
+                pen2.EndCap = System.Drawing.Drawing2D.LineCap.Round;
+                g.DrawLine(pen2, 12, 29, 20, 29);
+            }
         }
         return Icon.FromHandle(bmp.GetHicon());
     }

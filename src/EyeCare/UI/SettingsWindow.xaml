@@ -30,8 +30,20 @@
                             <Border.Effect>
                                 <DropShadowEffect Color="#FFFF9A3E" BlurRadius="18" ShadowDepth="0" Opacity="0.5"/>
                             </Border.Effect>
-                            <TextBlock Text="&#xE7B3;" FontFamily="Segoe MDL2 Assets" FontSize="19"
-                                       Foreground="#FF26190A" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <Grid>
+                                <!-- 负空间:半落日(裁掉下缘) -->
+                                <Grid Height="19" VerticalAlignment="Top" Margin="0,6,0,0" ClipToBounds="True">
+                                    <Ellipse Width="26" Height="26" HorizontalAlignment="Center" VerticalAlignment="Top"
+                                             Fill="#FF2A1B08"/>
+                                </Grid>
+                                <!-- 倒影波纹 -->
+                                <Rectangle Width="18" Height="2.6" RadiusX="1.3" RadiusY="1.3"
+                                           HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                                           Margin="0,0,0,7.5" Fill="#CC2A1B08"/>
+                                <Rectangle Width="11" Height="2.6" RadiusX="1.3" RadiusY="1.3"
+                                           HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                                           Margin="0,0,0,3.5" Fill="#772A1B08"/>
+                            </Grid>
                         </Border>
                         <StackPanel Margin="11,0,0,0" VerticalAlignment="Center">
                             <TextBlock Text="EyeCare" FontSize="15" FontWeight="Bold" Foreground="{StaticResource Text}"/>
