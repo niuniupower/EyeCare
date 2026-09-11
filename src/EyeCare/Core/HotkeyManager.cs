@@ -25,7 +25,16 @@ public sealed class HotkeyManager : IDisposable
 
     public HotkeyManager()
     {
-        _src = new HwndSource(new HwndSourceParameters("EyeCareHotkeys") { Width = 0, Height = 0 });
+        // WS_POPUP 无边框,并移到屏幕外,避免显示为可见悬浮窗
+        var hotkeyParams = new HwndSourceParameters("EyeCareHotkeys")
+        {
+            Width = 0,
+            Height = 0,
+            WindowStyle = unchecked((int)0x80000000), // WS_POPUP
+            PositionX = -32000,
+            PositionY = -32000
+        };
+        _src = new HwndSource(hotkeyParams);
         _src.AddHook(WndProc);
     }
 

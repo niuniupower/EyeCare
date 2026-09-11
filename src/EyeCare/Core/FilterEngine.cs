@@ -29,7 +29,16 @@ public sealed class FilterEngine : IDisposable
         _schedule = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
         _schedule.Tick += (_, _) => Apply();
 
-        _msg = new HwndSource(new HwndSourceParameters("EyeCareMsg") { Width = 0, Height = 0 });
+        // WS_POPUP 无边框,并移到屏幕外,避免显示为可见悬浮窗
+        var msgParams = new HwndSourceParameters("EyeCareMsg")
+        {
+            Width = 0,
+            Height = 0,
+            WindowStyle = unchecked((int)0x80000000), // WS_POPUP
+            PositionX = -32000,
+            PositionY = -32000
+        };
+        _msg = new HwndSource(msgParams);
         _msg.AddHook(MsgHook);
     }
 
