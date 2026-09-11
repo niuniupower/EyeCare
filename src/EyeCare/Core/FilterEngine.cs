@@ -5,26 +5,38 @@ namespace EyeCare.Core;
 
 /// <summary>
 /// 滤光总控:伽马优先,遮罩兜底;含定时模式与显示器/电源变化自动重应用。
-/// 亮度 ≥ 50%:纯 gamma 实现;低于 50%:gamma 压到 50% + 黑色遮罩继续加深。
+/// 所有色调变化均以 ~0.9 秒缓动过渡(参考 f.lux / LightBulb 的平滑过渡设计),
+/// 避免瞬间跳变带来的视觉不适。
 /// </summary>
 public sealed class FilterEngine : IDisposable
 {
+    // 过渡时长(毫秒)。滑块拖动与开关、模式切换统一使用。
+    private const int TransitionMs = 900;
+
     private readonly AppSettings _settings;
     private readonly GammaController _gamma = new();
     private readonly OverlayManager _overlays = new();
     private readonly DispatcherTimer _reapply;
     private readonly DispatcherTimer _schedule;
     private readonly HwndSource _msg;
+    private readonly DispatcherTimer _transition;
     private string _lastKey = "";
+
+    // 屏幕当前实际状态(线性光空间);过渡即在这组值与目标值之间插值
+    private (double kr, double kg, double kb, double bright) _current = (1, 1, 1, 1);
+    private (double kr, double kg, double kb, double bright) _target = (1, 1, 1, 1);
+    private (double kr, double kg, double kb, double bright) _from = (1, 1, 1, 1);
+    private DateTime _transitionStart = DateTime.UtcNow;
+    private double _dimAlphaTarget;
 
     public FilterEngine(AppSettings settings)
     {
         _settings = settings;
         _gamma.RefreshMonitors();
 
-        // 周期性重应用:锁屏/安全桌面/部分游戏会重置 gamma LUT
+        // 周期性重应用:锁屏/安全桌面/部分游戏会重置 gamma LUT(直接写当前值,不做过渡)
         _reapply = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
-        _reapply.Tick += (_, _) => Apply();
+        _reapply.Tick += (_, _) => ApplyCurrentToHardware();
 
         _schedule = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
         _schedule.Tick += (_, _) => Apply();
@@ -40,13 +52,16 @@ public sealed class FilterEngine : IDisposable
         };
         _msg = new HwndSource(msgParams);
         _msg.AddHook(MsgHook);
+
+        _transition = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        _transition.Tick += TransitionTick;
     }
 
     public void Start()
     {
         _reapply.Start();
         _schedule.Start();
-        Apply();
+        Apply(force: true);
     }
 
     private IntPtr MsgHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -56,11 +71,12 @@ public sealed class FilterEngine : IDisposable
         if (msg is WM_DISPLAYCHANGE or WM_POWERBROADCAST)
         {
             _gamma.RefreshMonitors();
-            Apply(force: true);
+            ApplyCurrentToHardware();
         }
         return IntPtr.Zero;
     }
 
+    /// <summary>计算目标状态并发起平滑过渡。force=true 时即使设置未变也重新过渡。</summary>
     public void Apply(bool force = false)
     {
         EvaluateSchedule();
@@ -68,49 +84,104 @@ public sealed class FilterEngine : IDisposable
         if (!force && key == _lastKey) return;
         _lastKey = key;
 
-        if (!_settings.FilterEnabled)
-        {
-            _gamma.RestoreAll();
-            _overlays.Update(null, 0);
-            Logger.Info("滤光: 已关闭,屏幕恢复");
-            return;
-        }
-
         double brightness = Math.Clamp(_settings.Brightness, 10, 100) / 100.0;
         double gammaDim = brightness >= 0.5 ? brightness : 0.5;
         double dimAlpha = brightness < 0.5 ? Math.Clamp(1 - brightness / 0.5, 0, 0.92) : 0;
+        _dimAlphaTarget = 0;
 
-        bool gammaOk;
+        (double kr, double kg, double kb) gains;
         (byte pr, byte pg, byte pb) preview;
         string modeDesc;
 
-        if (_settings.FilterMode == "green")
+        if (!_settings.FilterEnabled)
+        {
+            gains = (1, 1, 1); // 目标:原始状态(过渡结束后 RestoreAll 校准过的显示器)
+            preview = (255, 255, 255);
+            modeDesc = "已关闭";
+            _overlays.Update(null, 0);
+        }
+        else if (_settings.FilterMode == "green")
         {
             // 护眼绿(豆沙绿)模式:白点移向 #C7EDCC,定时色温不参与
-            var (kr, kg, kb) = GammaController.GreenGainsFor(_settings.GreenStrength);
-            gammaOk = _gamma.ApplyGains(kr, kg, kb, gammaDim);
-            preview = GammaController.GainsToColor(kr, kg, kb);
+            gains = GammaController.GreenGainsFor(_settings.GreenStrength);
+            preview = GammaController.GainsToColor(gains.kr, gains.kg, gains.kb);
             modeDesc = $"护眼绿 {_settings.GreenStrength:0}% → #{preview.pr:X2}{preview.pg:X2}{preview.pb:X2}";
+            _dimAlphaTarget = dimAlpha;
+            _overlays.Update(null, dimAlpha);
         }
         else
         {
             double temp = _settings.ScheduleActive ? _settings.ScheduleTemperature : _settings.ColorTemperature;
-            gammaOk = _gamma.ApplyWhitePoint(temp, gammaDim);
-            preview = GammaController.WhitePointColor(temp);
+            gains = GammaController.BradfordGains(temp);
+            preview = GammaController.GainsToColor(gains.kr, gains.kg, gains.kb);
             modeDesc = $"{temp:0}K → #{preview.pr:X2}{preview.pg:X2}{preview.pb:X2}";
+            _dimAlphaTarget = dimAlpha;
+            _overlays.Update(null, dimAlpha);
         }
 
-        System.Windows.Media.Color? tint = null;
-        if (!gammaOk)
+        if (!GammaRampIsReliable())
         {
+            // gamma 被系统拒绝的环境(如远程桌面):遮罩兜底(视觉近似,立即生效)
             byte a = (byte)Math.Clamp(Math.Round((1 - Math.Min(preview.pr / 255.0, Math.Min(preview.pg / 255.0, preview.pb / 255.0))) * 255), 0, 165);
-            tint = System.Windows.Media.Color.FromArgb(a, preview.pr, preview.pg, preview.pb);
-            if (brightness < 0.5) dimAlpha = Math.Clamp(1 - brightness, 0, 0.92);
+            _overlays.Update(System.Windows.Media.Color.FromArgb(a, preview.pr, preview.pg, preview.pb), _dimAlphaTarget);
         }
 
-        _overlays.Update(tint, dimAlpha);
-        Logger.Info($"滤光: {modeDesc} 亮度{brightness * 100:0}% " +
-                    $"gamma={(gammaOk ? "OK" : "拒绝→遮罩兜底")} 遮罩暗度={dimAlpha:0.00}");
+        _target = (gains.kr, gains.kg, gains.kb, gammaDim);
+        BeginTransition();
+        Logger.Info($"滤光: {modeDesc} 亮度{brightness * 100:0}% (平滑过渡 {TransitionMs}ms)");
+    }
+
+    /// <summary>判断 gamma 通道是否可用:校验显示器句柄存在且此前写入成功过</summary>
+    private bool GammaRampIsReliable()
+    {
+        if (_gamma.Monitors.Count == 0) return false;
+        return _gamma.LastApplySucceeded;
+    }
+
+    private void BeginTransition()
+    {
+        _from = _current;
+        _transitionStart = DateTime.UtcNow;
+        _transition.Start();
+    }
+
+    private void TransitionTick(object? sender, EventArgs e)
+    {
+        double t = (DateTime.UtcNow - _transitionStart).TotalMilliseconds / TransitionMs;
+        if (t >= 1)
+        {
+            _current = _target;
+            _transition.Stop();
+        }
+        else
+        {
+            double eased = SmoothStep(t);
+            _current = (Lerp(_from.kr, _target.kr, eased),
+                        Lerp(_from.kg, _target.kg, eased),
+                        Lerp(_from.kb, _target.kb, eased),
+                        Lerp(_from.bright, _target.bright, eased));
+        }
+        ApplyCurrentToHardware();
+
+        if (!_transition.IsEnabled && !_settings.FilterEnabled)
+            _gamma.RestoreAll(); // 过渡到恒等后,一次性还原校准过的原始 LUT
+    }
+
+    /// <summary>把当前插值状态写入显卡(无过渡,过渡循环与周期重应用共用)</summary>
+    private void ApplyCurrentToHardware()
+    {
+        if (_settings.FilterEnabled || _current != (1, 1, 1, 1))
+            _gamma.ApplyGains(_current.kr, _current.kg, _current.kb, _current.bright);
+        else
+            _gamma.RestoreAll();
+    }
+
+    private static double Lerp(double a, double b, double t) => a + (b - a) * t;
+
+    private static double SmoothStep(double t)
+    {
+        t = Math.Clamp(t, 0, 1);
+        return t * t * (3 - 2 * t);
     }
 
     private void EvaluateSchedule()
@@ -136,8 +207,10 @@ public sealed class FilterEngine : IDisposable
     {
         _reapply.Stop();
         _schedule.Stop();
+        _transition.Stop();
         _gamma.RestoreAll();
         _overlays.Update(null, 0);
+        _current = (1, 1, 1, 1);
     }
 
     public void Dispose()

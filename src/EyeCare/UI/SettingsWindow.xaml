@@ -229,7 +229,7 @@
                             <StackPanel>
                                 <TextBlock Text="关于" Style="{StaticResource CardTitle}"/>
                                 <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0"
-                                           Text="EyeCare 护眼卫士 v1.1.0 · 自用免费 · 完全本地运行,无任何联网、无任何账户。&#x0a;配置与日志保存在 %APPDATA%\EyeCare。代码完全属于你,可自由修改与分发。"/>
+                                           Text="EyeCare 护眼卫士 v1.2.0 · 自用免费 · 完全本地运行,无任何联网、无任何账户。&#x0a;配置与日志保存在 %APPDATA%\EyeCare。代码完全属于你,可自由修改与分发。"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>

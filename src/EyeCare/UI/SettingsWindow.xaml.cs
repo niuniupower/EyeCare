@@ -73,6 +73,14 @@ public partial class SettingsWindow : Window
         BoxHotkeyBreak.Text = _settings.HotkeyBreak;
     }
 
+    /// <summary>外部(如托盘快捷切换)修改设置后,重新同步界面</summary>
+    public void RefreshFromSettings()
+    {
+        _loading = true;
+        LoadValues();
+        _loading = false;
+    }
+
     // ── 滤光 ──
 
     private void ChkFilter_Changed(object sender, RoutedEventArgs e)

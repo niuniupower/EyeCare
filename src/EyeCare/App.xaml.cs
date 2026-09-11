@@ -43,7 +43,8 @@ public partial class App : Application
         _tray.OpenSettings += OpenSettingsWindow;
         _tray.BreakNow += StartBreak;
         _tray.ExitRequested += ExitApp;
-        _tray.FilterToggled += () => PersistAndApply();
+        _tray.FilterToggled += OnSettingsChangedExternally;
+        _tray.TemperatureShortcutSelected += OnSettingsChangedExternally;
         _tray.AutoStartToggled += () => AutoStartManager.Set(_settings.AutoStart);
 
         _break.BreakTriggered += StartBreak;
@@ -73,6 +74,12 @@ public partial class App : Application
             if (arg is "--settings" or "-s") OpenSettingsWindow();
             else if (arg is "--break" or "-b") StartBreak();
         }
+    }
+
+    private void OnSettingsChangedExternally()
+    {
+        PersistAndApply();
+        _settingsWindow?.RefreshFromSettings();
     }
 
     private void RegisterHotkeys()

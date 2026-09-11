@@ -11,9 +11,11 @@ public sealed class TrayService : IDisposable
     private static extern bool DestroyIcon(IntPtr hIcon);
 
     private readonly NotifyIcon _icon;
+    private readonly AppSettings _settings;
     private readonly ToolStripMenuItem _miFilter;
     private readonly ToolStripMenuItem _miBreak;
     private readonly ToolStripMenuItem _miAutoStart;
+    private readonly ToolStripMenuItem _miTempMenu;
     private Icon _currentIcon;
 
     public event Action? OpenSettings;
@@ -21,9 +23,11 @@ public sealed class TrayService : IDisposable
     public event Action? ExitRequested;
     public event Action? FilterToggled;
     public event Action? AutoStartToggled;
+    public event Action? TemperatureShortcutSelected;
 
     public TrayService(AppSettings settings)
     {
+        _settings = settings;
         _currentIcon = MakeIcon(settings.FilterEnabled);
 
         _icon = new NotifyIcon
@@ -46,6 +50,20 @@ public sealed class TrayService : IDisposable
         _miBreak = new ToolStripMenuItem("立即休息") { Enabled = settings.BreakEnabled };
         _miBreak.Click += (_, _) => BreakNow?.Invoke();
 
+        // 色温快捷切换(点选后自动切回色温模式)
+        _miTempMenu = new ToolStripMenuItem("色温切换");
+        foreach (var t in new[] { 3400, 4200, 4800, 5800, 6500 })
+        {
+            var item = new ToolStripMenuItem($"{t} K") { Tag = (double)t };
+            item.Click += (_, _) =>
+            {
+                _settings.FilterMode = "temperature";
+                _settings.ColorTemperature = (double)item.Tag!;
+                TemperatureShortcutSelected?.Invoke();
+            };
+            _miTempMenu.DropDownItems.Add(item);
+        }
+
         _miAutoStart = new ToolStripMenuItem("开机自启") { CheckOnClick = true, Checked = settings.AutoStart };
         _miAutoStart.CheckedChanged += (_, _) =>
         {
@@ -66,6 +84,7 @@ public sealed class TrayService : IDisposable
         _icon.ContextMenuStrip.Items.AddRange(
         [
             _miFilter,
+            _miTempMenu,
             new ToolStripSeparator(),
             _miBreak,
             new ToolStripSeparator(),
@@ -87,6 +106,9 @@ public sealed class TrayService : IDisposable
             _miBreak.Enabled = settings.BreakEnabled;
         if (_miAutoStart.Checked != settings.AutoStart)
             _miAutoStart.Checked = settings.AutoStart;
+
+        foreach (ToolStripMenuItem it in _miTempMenu.DropDownItems)
+            it.Checked = settings.FilterMode == "temperature" && (double)it.Tag! == settings.ColorTemperature;
 
         string tip = $"EyeCare 护眼卫士 · 滤光{(settings.FilterEnabled ? "开" : "关")}\n{status}";
         if (_icon.Text != tip && tip.Length <= 63)

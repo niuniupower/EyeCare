@@ -62,6 +62,11 @@ public sealed class GammaController : IDisposable
 
     public List<MonitorHandle> Monitors { get; } = new();
 
+    /// <summary>最近一次 gamma 写入是否成功(遮罩兜底的判断依据)</summary>
+    public bool LastApplySucceeded { get; private set; } = true;
+
+    private bool _loggedGammaState = true;
+
     public void RefreshMonitors()
     {
         foreach (var m in Monitors)
@@ -199,11 +204,14 @@ public sealed class GammaController : IDisposable
             }
             bool ok = GammaNative.SetDeviceGammaRamp(mon.Dc, ref ramp);
             if (ok) ok = Verify(mon, ramp);
-            if (!ok)
-            {
-                allOk = false;
-                Logger.Info($"gamma 写入被系统拒绝: {mon.DeviceName}");
-            }
+            if (!ok) allOk = false;
+        }
+
+        LastApplySucceeded = allOk;
+        if (allOk != _loggedGammaState)
+        {
+            _loggedGammaState = allOk;
+            Logger.Info(allOk ? "gamma 写入恢复正常" : "gamma 写入被系统拒绝,启用遮罩兜底");
         }
         return allOk;
     }

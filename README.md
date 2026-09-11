@@ -87,9 +87,22 @@ src/EyeCare/
 | 价格 | 终身许可收费 | **免费,代码自有** |
 | Focus Read / Magic Window / Auto Dark | ✅ | 暂未实现(路线图) |
 
+## 设计参考
+
+实现过程中参考了以下公开方案的设计与算法:
+
+- **[redshift](https://github.com/jonls/redshift)**(开源,Linux/Windows):gamma ramp 色温调整的经典实现,
+  其 `colorramp.c` 使用 Ingo Thies 黑体色表 + `(输入×亮度×白点)^(1/γ)` 变换。
+  本项目在其基础上改用 Bradford 色适应 + 线性光空间计算,白点更准、灰阶更干净。
+- **[LightBulb](https://github.com/Tyrrrz/LightBulb)**(开源 MIT,.NET/WPF,与本项目同技术栈):
+  参考其平滑 gamma 过渡、日出日落时间表、应用白名单等设计。
+- **[f.lux](https://justgetflux.com/)**(闭源):参考其"色调变化永远平缓过渡"的理念
+  (默认 30 分钟过渡窗口)与本项目的 0.9 秒缓动过渡同源。
+
 ## 路线图(可按需扩展)
 
 - 短休息/长休息交替、休息提示音
 - Focus Read(高亮阅读区)/ Focus Blur(背景模糊)
-- 日出日落自动色温
+- 日出日落自动色温(地理位置)
+- 颜色敏感应用白名单(游戏/修图时自动暂停)
 - 多语言
