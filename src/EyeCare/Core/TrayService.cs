@@ -50,9 +50,9 @@ public sealed class TrayService : IDisposable
         _miBreak = new ToolStripMenuItem("立即休息") { Enabled = settings.BreakEnabled };
         _miBreak.Click += (_, _) => BreakNow?.Invoke();
 
-        // 色温快捷切换(点选后自动切回色温模式)
+        // 色温快捷切换(与 f.lux 官方预设一致;点选后自动切回色温模式)
         _miTempMenu = new ToolStripMenuItem("色温切换");
-        foreach (var t in new[] { 3400, 4200, 4800, 5800, 6500 })
+        foreach (var t in new[] { 1900, 2300, 2700, 3400, 4200, 4800, 5500, 6500 })
         {
             var item = new ToolStripMenuItem($"{t} K") { Tag = (double)t };
             item.Click += (_, _) =>

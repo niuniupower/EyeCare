@@ -130,13 +130,29 @@ public partial class SettingsWindow : Window
             SldTemp.Value = double.Parse(tag); // 触发 Sld_ValueChanged 完成保存与应用
     }
 
+    private void Scene_Click(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        if (sender is RadioButton { Tag: string tag })
+        {
+            var parts = tag.Split(',');
+            SldTemp.Value = double.Parse(parts[0]);
+            SldBright.Value = double.Parse(parts[1]);
+            PersistAndApply();
+        }
+    }
+
     private string MatchPreset()
     {
         return SldTemp.Value switch
         {
+            1900 => "烛光",
+            2300 => "暮色",
+            2700 => "白炽",
             3400 => "夜间",
             4200 => "暖光",
-            5000 => "办公",
+            4800 => "舒适",
+            5500 => "日光",
             5800 => "阅读",
             _ => "自定义"
         };
@@ -145,9 +161,13 @@ public partial class SettingsWindow : Window
     private void SyncPresetChips()
     {
         double t = SldTemp.Value;
+        PresetCandle.IsChecked = t == 1900;
+        PresetDusk.IsChecked = t == 2300;
+        PresetIncandescent.IsChecked = t == 2700;
         PresetNight.IsChecked = t == 3400;
         PresetWarm.IsChecked = t == 4200;
-        PresetOffice.IsChecked = t == 5000;
+        PresetCozy.IsChecked = t == 4800;
+        PresetSunlight.IsChecked = t == 5500;
         PresetRead.IsChecked = t == 5800;
     }
 
@@ -163,6 +183,10 @@ public partial class SettingsWindow : Window
         {
             var (kr, kg, kb) = GammaController.GreenGainsFor(SldGreen.Value);
             rgb = GammaController.GainsToColor(kr, kg, kb);
+        }
+        else if (_settings.FilterMode == "darkroom")
+        {
+            rgb = GammaController.GainsToColor(1.0, 0.08, 0.05);
         }
         else
         {

@@ -55,6 +55,8 @@
                                                  Checked="Mode_Checked" Tag="temperature"/>
                                     <RadioButton x:Name="ModeGreen" Style="{StaticResource PresetChip}" Content="🌿 护眼绿"
                                                  Checked="Mode_Checked" Tag="green"/>
+                                    <RadioButton x:Name="ModeDarkroom" Style="{StaticResource PresetChip}" Content="🟥 暗房"
+                                                 Checked="Mode_Checked" Tag="darkroom"/>
                                 </StackPanel>
 
                                 <StackPanel x:Name="GrnSection" Visibility="Collapsed" Margin="0,16,0,0">
@@ -92,15 +94,38 @@
                                         Minimum="1500" Maximum="6500" TickFrequency="50" IsSnapToTickEnabled="True"
                                         ValueChanged="Sld_ValueChanged"/>
 
-                                <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                                <TextBlock Text="色彩预设(与 f.lux 官方色温一致)" Style="{StaticResource Hint}" Margin="0,14,0,0"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <RadioButton x:Name="PresetCandle" Style="{StaticResource PresetChip}" Content="🕯 烛光 1900K"
+                                                 Checked="Preset_Checked" Tag="1900"/>
+                                    <RadioButton x:Name="PresetDusk" Style="{StaticResource PresetChip}" Content="🌇 暮色 2300K"
+                                                 Checked="Preset_Checked" Tag="2300"/>
+                                    <RadioButton x:Name="PresetIncandescent" Style="{StaticResource PresetChip}" Content="💡 白炽 2700K"
+                                                 Checked="Preset_Checked" Tag="2700"/>
                                     <RadioButton x:Name="PresetNight" Style="{StaticResource PresetChip}" Content="🌙 夜间 3400K"
                                                  Checked="Preset_Checked" Tag="3400"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                                     <RadioButton x:Name="PresetWarm" Style="{StaticResource PresetChip}" Content="🕯 暖光 4200K"
                                                  Checked="Preset_Checked" Tag="4200"/>
-                                    <RadioButton x:Name="PresetOffice" Style="{StaticResource PresetChip}" Content="💼 办公 5000K"
-                                                 Checked="Preset_Checked" Tag="5000"/>
+                                    <RadioButton x:Name="PresetCozy" Style="{StaticResource PresetChip}" Content="🛋 舒适 4800K"
+                                                 Checked="Preset_Checked" Tag="4800"/>
+                                    <RadioButton x:Name="PresetSunlight" Style="{StaticResource PresetChip}" Content="☀ 日光 5500K"
+                                                 Checked="Preset_Checked" Tag="5500"/>
                                     <RadioButton x:Name="PresetRead" Style="{StaticResource PresetChip}" Content="📖 阅读 5800K"
                                                  Checked="Preset_Checked" Tag="5800"/>
+                                </StackPanel>
+
+                                <TextBlock Text="场景模式(一键切换色温 + 亮度组合)" Style="{StaticResource Hint}" Margin="0,16,0,0"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <RadioButton Style="{StaticResource PresetChip}" Content="🎮 游戏 5800K·100%"
+                                                 Checked="Scene_Click" Tag="5800,100"/>
+                                    <RadioButton Style="{StaticResource PresetChip}" Content="🎬 影院 4200K·80%"
+                                                 Checked="Scene_Click" Tag="4200,80"/>
+                                    <RadioButton Style="{StaticResource PresetChip}" Content="📖 阅读 4000K·90%"
+                                                 Checked="Scene_Click" Tag="4000,90"/>
+                                    <RadioButton Style="{StaticResource PresetChip}" Content="🌙 加班 3400K·70%"
+                                                 Checked="Scene_Click" Tag="3400,70"/>
                                 </StackPanel>
                             </StackPanel>
                         </Border>
@@ -229,7 +254,7 @@
                             <StackPanel>
                                 <TextBlock Text="关于" Style="{StaticResource CardTitle}"/>
                                 <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0"
-                                           Text="EyeCare 护眼卫士 v1.2.0 · 自用免费 · 完全本地运行,无任何联网、无任何账户。&#x0a;配置与日志保存在 %APPDATA%\EyeCare。代码完全属于你,可自由修改与分发。"/>
+                                           Text="EyeCare 护眼卫士 v1.3.0 · 自用免费 · 完全本地运行,无任何联网、无任何账户。&#x0a;配置与日志保存在 %APPDATA%\EyeCare。代码完全属于你,可自由修改与分发。"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>

@@ -110,35 +110,6 @@ public sealed class GammaController : IDisposable
         }
     }
 
-    /// <summary>
-    /// 应用色温(K)与亮度(0..1)。返回是否全部显示器都成功(GPU 级生效)。
-    /// Windows 会校验 LUT 偏离程度,过暗或过偏会被拒绝 —— 失败时调用方应回退为遮罩层。
-    /// </summary>
-    public bool Apply(double kelvin, double brightness)
-    {
-        var (r, g, b) = KelvinToChannels(kelvin);
-        bool allOk = Monitors.Count > 0;
-        foreach (var m in Monitors)
-        {
-            var ramp = new GammaNative.RAMP();
-            for (int i = 0; i < 256; i++)
-            {
-                ushort baseV = (ushort)Math.Clamp(Math.Round(65535.0 * (i / 255.0) * brightness), 0, 65535);
-                ramp.Red[i] = (ushort)Math.Clamp((long)baseV * r, 0, 65535);
-                ramp.Green[i] = (ushort)Math.Clamp((long)baseV * g, 0, 65535);
-                ramp.Blue[i] = (ushort)Math.Clamp((long)baseV * b, 0, 65535);
-            }
-            bool ok = GammaNative.SetDeviceGammaRamp(m.Dc, ref ramp);
-            if (ok) ok = Verify(m, ramp);
-            if (!ok)
-            {
-                allOk = false;
-                Logger.Info($"gamma 写入被系统拒绝: {m.DeviceName}");
-            }
-        }
-        return allOk;
-    }
-
     private static bool Verify(MonitorHandle m, GammaNative.RAMP ramp)
     {
         var rb = new GammaNative.RAMP();
@@ -331,28 +302,6 @@ public sealed class GammaController : IDisposable
         ((byte)Math.Round(LinearToSrgb(Clamp01(kr)) * 255),
          (byte)Math.Round(LinearToSrgb(Clamp01(kg)) * 255),
          (byte)Math.Round(LinearToSrgb(Clamp01(kb)) * 255));
-
-    /// <summary>色温 → RGB 通道系数(Tanner Helland 近似,旧版线性方案,保留用于兼容)</summary>
-    [Obsolete("改用 ApplyWhitePoint/WhitePointColor(感知柔和方案)")]
-    public static (double r, double g, double b) KelvinToChannels(double kelvin)
-    {
-        double t = Math.Clamp(kelvin, 1000, 40000) / 100.0;
-        double r, g, b;
-        if (t <= 66) r = 255;
-        else r = 329.698727446 * Math.Pow(t - 60, -0.1332047592);
-
-        if (t <= 66) g = 99.4708025861 * Math.Log(t) - 161.1195681661;
-        else g = 288.1221695283 * Math.Pow(t - 60, -0.0755148492);
-
-        if (t >= 66) b = 255;
-        else if (t <= 19) b = 0;
-        else b = 138.5177312231 * Math.Log(t - 10) - 305.0447927307;
-
-        r = Math.Clamp(r, 0, 255) / 255.0;
-        g = Math.Clamp(g, 0, 255) / 255.0;
-        b = Math.Clamp(b, 0, 255) / 255.0;
-        return (r, g, b);
-    }
 
     public void Dispose()
     {

@@ -1,17 +1,30 @@
+using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using System.Windows.Threading;
 
 namespace EyeCare.Core;
 
 /// <summary>
-/// 滤光总控:伽马优先,遮罩兜底;含定时模式与显示器/电源变化自动重应用。
+/// 滤光总控:伽马优先,遮罩兜底;含定时模式与显示器/电源/前台窗口变化自动重应用。
 /// 所有色调变化均以 ~0.9 秒缓动过渡(参考 f.lux / LightBulb 的平滑过渡设计),
 /// 避免瞬间跳变带来的视觉不适。
+/// 前台窗口切换时立即重写 gamma(参考 LightBulb GammaService:全屏应用切换会重置 LUT)。
 /// </summary>
 public sealed class FilterEngine : IDisposable
 {
     // 过渡时长(毫秒)。滑块拖动与开关、模式切换统一使用。
     private const int TransitionMs = 900;
+    private const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
+    private const uint WINEVENT_OUTOFCONTEXT = 0x0000;
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax, IntPtr hmodWinEventProc,
+        WinEventDelegate lpfnWinEventProc, uint idProcess, uint idThread, uint dwFlags);
+
+    [DllImport("user32.dll")]
+    private static extern bool UnhookWinEvent(IntPtr hWinEventHook);
+
+    private delegate void WinEventDelegate(IntPtr hHook, uint event_, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime);
 
     private readonly AppSettings _settings;
     private readonly GammaController _gamma = new();
@@ -20,6 +33,9 @@ public sealed class FilterEngine : IDisposable
     private readonly DispatcherTimer _schedule;
     private readonly HwndSource _msg;
     private readonly DispatcherTimer _transition;
+    private readonly IntPtr _foregroundHook;
+    private readonly WinEventDelegate _foregroundHookProc; // 防 GC 回收
+    private DateTime _lastForegroundApply = DateTime.MinValue;
     private string _lastKey = "";
 
     // 屏幕当前实际状态(线性光空间);过渡即在这组值与目标值之间插值
@@ -55,6 +71,19 @@ public sealed class FilterEngine : IDisposable
 
         _transition = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
         _transition.Tick += TransitionTick;
+
+        // 前台窗口切换时重写 gamma(防抖 200ms,参考 LightBulb)
+        _foregroundHookProc = OnForegroundChanged;
+        _foregroundHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND,
+            IntPtr.Zero, _foregroundHookProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    }
+
+    private void OnForegroundChanged(IntPtr hHook, uint eventId, IntPtr hwnd, int idObject, int idChild, uint thread, uint time)
+    {
+        var now = DateTime.UtcNow;
+        if ((now - _lastForegroundApply).TotalMilliseconds < 200) return;
+        _lastForegroundApply = now;
+        ApplyCurrentToHardware();
     }
 
     public void Start()
@@ -106,6 +135,15 @@ public sealed class FilterEngine : IDisposable
             gains = GammaController.GreenGainsFor(_settings.GreenStrength);
             preview = GammaController.GainsToColor(gains.kr, gains.kg, gains.kb);
             modeDesc = $"护眼绿 {_settings.GreenStrength:0}% → #{preview.pr:X2}{preview.pg:X2}{preview.pb:X2}";
+            _dimAlphaTarget = dimAlpha;
+            _overlays.Update(null, dimAlpha);
+        }
+        else if (_settings.FilterMode == "darkroom")
+        {
+            // 暗房模式(f.lux 同名):仅保留红色成分,深夜最低亮度刺激
+            gains = (1.0, 0.08, 0.05);
+            preview = GammaController.GainsToColor(gains.kr, gains.kg, gains.kb);
+            modeDesc = $"暗房 → #{preview.pr:X2}{preview.pg:X2}{preview.pb:X2}";
             _dimAlphaTarget = dimAlpha;
             _overlays.Update(null, dimAlpha);
         }
@@ -216,6 +254,7 @@ public sealed class FilterEngine : IDisposable
     public void Dispose()
     {
         ShutdownRestore();
+        if (_foregroundHook != IntPtr.Zero) UnhookWinEvent(_foregroundHook);
         _gamma.Dispose();
         _msg.Dispose();
     }
