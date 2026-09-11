@@ -180,6 +180,12 @@ public sealed class GammaController : IDisposable
     public bool ApplyWhitePoint(double kelvin, double brightness)
     {
         var (kr, kg, kb) = BradfordGains(kelvin);
+        return ApplyGains(kr, kg, kb, brightness);
+    }
+
+    /// <summary>按任意通道增益应用滤光(绿模式与色温模式共用的底层)</summary>
+    public bool ApplyGains(double kr, double kg, double kb, double brightness)
+    {
         bool allOk = Monitors.Count > 0;
         foreach (var mon in Monitors)
         {
@@ -297,10 +303,26 @@ public sealed class GammaController : IDisposable
     public static (byte r, byte g, byte b) WhitePointColor(double kelvin)
     {
         var (kr, kg, kb) = BradfordGains(kelvin);
-        return ((byte)Math.Round(LinearToSrgb(Clamp01(kr)) * 255),
-                (byte)Math.Round(LinearToSrgb(Clamp01(kg)) * 255),
-                (byte)Math.Round(LinearToSrgb(Clamp01(kb)) * 255));
+        return GainsToColor(kr, kg, kb);
     }
+
+    /// <summary>经典豆沙绿 #C7EDCC 的线性光白点增益:整个画面泛暖绿,白色背景呈现护眼绿</summary>
+    public static readonly (double kr, double kg, double kb) GreenGains = (0.571, 0.845, 0.604);
+
+    /// <summary>按浓度(0-100%)在原色与豆沙绿之间插值的增益</summary>
+    public static (double kr, double kg, double kb) GreenGainsFor(double strengthPercent)
+    {
+        double s = Math.Clamp(strengthPercent, 0, 100) / 100.0;
+        return (1 + (GreenGains.kr - 1) * s,
+                1 + (GreenGains.kg - 1) * s,
+                1 + (GreenGains.kb - 1) * s);
+    }
+
+    /// <summary>通道增益 → 等效白点颜色(0-255 RGB)</summary>
+    public static (byte r, byte g, byte b) GainsToColor(double kr, double kg, double kb) =>
+        ((byte)Math.Round(LinearToSrgb(Clamp01(kr)) * 255),
+         (byte)Math.Round(LinearToSrgb(Clamp01(kg)) * 255),
+         (byte)Math.Round(LinearToSrgb(Clamp01(kb)) * 255));
 
     /// <summary>色温 → RGB 通道系数(Tanner Helland 近似,旧版线性方案,保留用于兼容)</summary>
     [Obsolete("改用 ApplyWhitePoint/WhitePointColor(感知柔和方案)")]

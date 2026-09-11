@@ -45,8 +45,12 @@ public partial class SettingsWindow : Window
         ChkFilter.IsChecked = _settings.FilterEnabled;
         SldTemp.Value = _settings.ColorTemperature;
         SldBright.Value = _settings.Brightness;
+        SldGreen.Value = _settings.GreenStrength;
+        ModeTemp.IsChecked = _settings.FilterMode != "green";
+        ModeGreen.IsChecked = _settings.FilterMode == "green";
+        UpdateModeSections();
         SyncPresetChips();
-        UpdateTempPreview();
+        UpdatePreview();
 
         ChkBreak.IsChecked = _settings.BreakEnabled;
         BoxInterval.Text = _settings.BreakIntervalMinutes.ToString();
@@ -83,10 +87,32 @@ public partial class SettingsWindow : Window
         if (_loading) return;
         _settings.ColorTemperature = (int)SldTemp.Value;
         _settings.Brightness = (int)SldBright.Value;
+        _settings.GreenStrength = (int)SldGreen.Value;
         _settings.SelectedPreset = MatchPreset();
         SyncPresetChips();
-        UpdateTempPreview();
+        UpdatePreview();
         Debounce();
+    }
+
+    // ── 色调模式 ──
+
+    private void Mode_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_loading) return;
+        if (sender is RadioButton { Tag: string tag })
+        {
+            _settings.FilterMode = tag;
+            UpdateModeSections();
+            UpdatePreview();
+            PersistAndApply();
+        }
+    }
+
+    private void UpdateModeSections()
+    {
+        bool green = _settings.FilterMode == "green";
+        GrnSection.Visibility = green ? Visibility.Visible : Visibility.Collapsed;
+        TempSection.Visibility = green ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void Preset_Checked(object sender, RoutedEventArgs e)
@@ -117,15 +143,24 @@ public partial class SettingsWindow : Window
         PresetRead.IsChecked = t == 5800;
     }
 
-    private void UpdateTempPreview()
+    private void UpdatePreview()
     {
-        double k = SldTemp.Value;
-        TxtTempValue.Text = $"{k:0} K";
+        TxtTempValue.Text = $"{SldTemp.Value:0} K";
         TxtBrightValue.Text = $"{SldBright.Value:0} %";
+        TxtGreenValue.Text = $"{SldGreen.Value:0} %";
 
-        // 预览色 = 目标色温下的白点等效色,与实际滤光后的白色一致
-        var (r, g, b) = GammaController.WhitePointColor(k);
-        var color = Color.FromRgb(r, g, b);
+        // 预览色 = 当前模式下的白点等效色,与实际滤光后的白色一致
+        (byte r, byte g, byte b) rgb;
+        if (_settings.FilterMode == "green")
+        {
+            var (kr, kg, kb) = GammaController.GreenGainsFor(SldGreen.Value);
+            rgb = GammaController.GainsToColor(kr, kg, kb);
+        }
+        else
+        {
+            rgb = GammaController.WhitePointColor(SldTemp.Value);
+        }
+        var color = Color.FromRgb(rgb.r, rgb.g, rgb.b);
         PreviewBand.Background = new SolidColorBrush(color);
         double lum = (0.299 * color.R + 0.587 * color.G + 0.114 * color.B) / 255.0;
         var fg = lum > 0.62 ? Color.FromRgb(0x1D, 0x1E, 0x24) : Colors.White;

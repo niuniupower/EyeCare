@@ -5,9 +5,12 @@ namespace EyeCare.Core;
 public sealed class AppSettings
 {
     // ── 护眼滤光 ──
+    /// <summary>滤光模式:temperature = 色温(黑体轨迹) | green = 护眼绿(豆沙绿白点)</summary>
+    public string FilterMode { get; set; } = "temperature";
     public bool FilterEnabled { get; set; } = true;
     public double ColorTemperature { get; set; } = 4800;
     public double Brightness { get; set; } = 100;
+    public double GreenStrength { get; set; } = 100;
     public string SelectedPreset { get; set; } = "暖光";
 
     // ── 休息提醒 ──

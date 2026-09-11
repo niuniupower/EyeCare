@@ -64,7 +64,7 @@ public sealed class FilterEngine : IDisposable
     public void Apply(bool force = false)
     {
         EvaluateSchedule();
-        string key = $"{_settings.FilterEnabled}|{_settings.ColorTemperature}|{_settings.Brightness}|{_settings.ScheduleActive}";
+        string key = $"{_settings.FilterEnabled}|{_settings.FilterMode}|{_settings.ColorTemperature}|{_settings.Brightness}|{_settings.ScheduleActive}|{_settings.GreenStrength}";
         if (!force && key == _lastKey) return;
         _lastKey = key;
 
@@ -76,28 +76,41 @@ public sealed class FilterEngine : IDisposable
             return;
         }
 
-        double temp = _settings.ScheduleActive ? _settings.ScheduleTemperature : _settings.ColorTemperature;
         double brightness = Math.Clamp(_settings.Brightness, 10, 100) / 100.0;
-
         double gammaDim = brightness >= 0.5 ? brightness : 0.5;
         double dimAlpha = brightness < 0.5 ? Math.Clamp(1 - brightness / 0.5, 0, 0.92) : 0;
 
-        bool gammaOk = _gamma.ApplyWhitePoint(temp, gammaDim);
-        var (pr, pg, pb) = GammaController.WhitePointColor(temp);
-        var (kr, kg, kb) = GammaController.BradfordGains(temp);
+        bool gammaOk;
+        (byte pr, byte pg, byte pb) preview;
+        string modeDesc;
+
+        if (_settings.FilterMode == "green")
+        {
+            // 护眼绿(豆沙绿)模式:白点移向 #C7EDCC,定时色温不参与
+            var (kr, kg, kb) = GammaController.GreenGainsFor(_settings.GreenStrength);
+            gammaOk = _gamma.ApplyGains(kr, kg, kb, gammaDim);
+            preview = GammaController.GainsToColor(kr, kg, kb);
+            modeDesc = $"护眼绿 {_settings.GreenStrength:0}% → #{preview.pr:X2}{preview.pg:X2}{preview.pb:X2}";
+        }
+        else
+        {
+            double temp = _settings.ScheduleActive ? _settings.ScheduleTemperature : _settings.ColorTemperature;
+            gammaOk = _gamma.ApplyWhitePoint(temp, gammaDim);
+            preview = GammaController.WhitePointColor(temp);
+            modeDesc = $"{temp:0}K → #{preview.pr:X2}{preview.pg:X2}{preview.pb:X2}";
+        }
 
         System.Windows.Media.Color? tint = null;
         if (!gammaOk)
         {
-            byte a = (byte)Math.Clamp(Math.Round((1 - Math.Min(pr / 255.0, Math.Min(pg / 255.0, pb / 255.0))) * 255), 0, 165);
-            tint = System.Windows.Media.Color.FromArgb(a, pr, pg, pb);
+            byte a = (byte)Math.Clamp(Math.Round((1 - Math.Min(preview.pr / 255.0, Math.Min(preview.pg / 255.0, preview.pb / 255.0))) * 255), 0, 165);
+            tint = System.Windows.Media.Color.FromArgb(a, preview.pr, preview.pg, preview.pb);
             if (brightness < 0.5) dimAlpha = Math.Clamp(1 - brightness, 0, 0.92);
         }
 
         _overlays.Update(tint, dimAlpha);
-        Logger.Info($"滤光: {temp:0}K 亮度{brightness * 100:0}% " +
-                    $"gamma={(gammaOk ? "OK" : "拒绝→遮罩兜底")} 遮罩暗度={dimAlpha:0.00} " +
-                    $"白点增益 R{kr:F3} G{kg:F3} B{kb:F3} → #{pr:X2}{pg:X2}{pb:X2}");
+        Logger.Info($"滤光: {modeDesc} 亮度{brightness * 100:0}% " +
+                    $"gamma={(gammaOk ? "OK" : "拒绝→遮罩兜底")} 遮罩暗度={dimAlpha:0.00}");
     }
 
     private void EvaluateSchedule()
