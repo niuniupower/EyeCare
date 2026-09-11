@@ -171,7 +171,139 @@ public sealed class GammaController : IDisposable
         }
     }
 
-    /// <summary>色温 → RGB 通道系数(Tanner Helland 近似,各分量 0..1)</summary>
+    /// <summary>
+    /// 感知柔和版:Bradford 色适应变换 + sRGB 感知编码。
+    /// 在线性光空间把 D65 白点整体适配到目标色温的黑体轨迹白点,
+    /// 灰阶保持"干净的暖灰"(不发黄发脏),明暗分布与对比不受影响。
+    /// 返回是否全部显示器成功。
+    /// </summary>
+    public bool ApplyWhitePoint(double kelvin, double brightness)
+    {
+        var (kr, kg, kb) = BradfordGains(kelvin);
+        bool allOk = Monitors.Count > 0;
+        foreach (var mon in Monitors)
+        {
+            var ramp = new GammaNative.RAMP();
+            for (int i = 0; i < 256; i++)
+            {
+                double lin = SrgbToLinear(i / 255.0) * brightness;
+                ramp.Red[i] = ToRamp(LinearToSrgb(Clamp01(lin * kr)));
+                ramp.Green[i] = ToRamp(LinearToSrgb(Clamp01(lin * kg)));
+                ramp.Blue[i] = ToRamp(LinearToSrgb(Clamp01(lin * kb)));
+            }
+            bool ok = GammaNative.SetDeviceGammaRamp(mon.Dc, ref ramp);
+            if (ok) ok = Verify(mon, ramp);
+            if (!ok)
+            {
+                allOk = false;
+                Logger.Info($"gamma 写入被系统拒绝: {mon.DeviceName}");
+            }
+        }
+        return allOk;
+    }
+
+    private static double Clamp01(double v) => Math.Clamp(v, 0, 1);
+
+    private static ushort ToRamp(double v) => (ushort)Math.Clamp(Math.Round(v * 65535.0), 0, 65535);
+
+    /// <summary>sRGB 传递函数:感知值 → 线性光</summary>
+    private static double SrgbToLinear(double v) =>
+        v <= 0.04045 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4);
+
+    /// <summary>sRGB 传递函数:线性光 → 感知值</summary>
+    private static double LinearToSrgb(double v) =>
+        v <= 0.0031308 ? v * 12.92 : 1.055 * Math.Pow(v, 1.0 / 2.4) - 0.055;
+
+    /// <summary>黑体轨迹 CIE xy 色坐标(Krystek 多项式近似,适用 1000K–15000K)</summary>
+    public static (double x, double y) KelvinToXY(double kelvin)
+    {
+        double t = Math.Clamp(kelvin, 1000, 15000);
+        double u = (0.860117757 + 1.54118254e-4 * t + 1.28641212e-7 * t * t)
+                 / (1 + 8.42420235e-4 * t + 7.08145163e-7 * t * t);
+        double v = (0.317398726 + 4.22806245e-5 * t + 4.20481691e-8 * t * t)
+                 / (1 - 2.89741816e-5 * t + 1.61456053e-7 * t * t);
+        double d = 2 * u - 8 * v + 4;
+        double x = 3 * u / d;
+        double y = 2 * v / d;
+        return (x, y);
+    }
+
+    private static readonly double[] D65 = { 0.95047, 1.00000, 1.08883 };
+
+    private static readonly double[,] Bradford =
+    {
+        {  0.8951000,  0.2664000, -0.1614000 },
+        { -0.7502000,  1.7135000,  0.0367000 },
+        {  0.0389000, -0.0685000,  1.0296000 }
+    };
+
+    /// <summary>
+    /// Bradford 白点适配的各通道线性光增益(kr, kg, kb)。
+    /// 取适配矩阵作用于灰阶向量 (1,1,1) 的结果(即矩阵行和),
+    /// 因此 ramp[255] 精确等于目标色温白点;通道增益亮度加权和 ≈ 1,不改变整体明暗。
+    /// gamma ramp 是单通道曲线,非对角耦合(饱和色的微小色相偏移)在此不可表达,属业界标准近似。
+    /// </summary>
+    public static (double kr, double kg, double kb) BradfordGains(double kelvin)
+    {
+        var (x, y) = KelvinToXY(kelvin);
+        double[] wd = { x / y, 1.0, (1 - x - y) / y };
+
+        // d_i = (M·Wd)_i / (M·Ws)_i
+        double[] d = new double[3];
+        for (int i = 0; i < 3; i++)
+        {
+            double src = 0, dst = 0;
+            for (int j = 0; j < 3; j++)
+            {
+                src += Bradford[i, j] * D65[j];
+                dst += Bradford[i, j] * wd[j];
+            }
+            d[i] = dst / src;
+        }
+
+        // M' = M⁻¹ · diag(d) · M,再取行和得到灰阶增益
+        double[,] inv = Inverse3(Bradford);
+        double kr = 0, kg = 0, kb = 0;
+        double[] rowSum = new double[3];
+        for (int i = 0; i < 3; i++)
+            for (int j = 0; j < 3; j++)
+            {
+                double sum = 0;
+                for (int k = 0; k < 3; k++)
+                    sum += inv[i, k] * d[k] * Bradford[k, j];
+                rowSum[i] += sum;
+            }
+        kr = rowSum[0];
+        kg = rowSum[1];
+        kb = rowSum[2];
+        return (kr, kg, kb);
+    }
+
+    private static double[,] Inverse3(double[,] m)
+    {
+        double a = m[0, 0], b = m[0, 1], c = m[0, 2];
+        double d = m[1, 0], e = m[1, 1], f = m[1, 2];
+        double g = m[2, 0], h = m[2, 1], i = m[2, 2];
+        double det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+        return new double[,]
+        {
+            {  (e * i - f * h) / det, -(b * i - c * h) / det,  (b * f - c * e) / det },
+            { -(d * i - f * g) / det,  (a * i - c * g) / det, -(a * f - c * d) / det },
+            {  (d * h - e * g) / det, -(a * h - b * g) / det,  (a * e - b * d) / det }
+        };
+    }
+
+    /// <summary>目标色温下"白色"的等效显示颜色(0-255 RGB),用于 UI 预览与遮罩兜底,与实际白点一致</summary>
+    public static (byte r, byte g, byte b) WhitePointColor(double kelvin)
+    {
+        var (kr, kg, kb) = BradfordGains(kelvin);
+        return ((byte)Math.Round(LinearToSrgb(Clamp01(kr)) * 255),
+                (byte)Math.Round(LinearToSrgb(Clamp01(kg)) * 255),
+                (byte)Math.Round(LinearToSrgb(Clamp01(kb)) * 255));
+    }
+
+    /// <summary>色温 → RGB 通道系数(Tanner Helland 近似,旧版线性方案,保留用于兼容)</summary>
+    [Obsolete("改用 ApplyWhitePoint/WhitePointColor(感知柔和方案)")]
     public static (double r, double g, double b) KelvinToChannels(double kelvin)
     {
         double t = Math.Clamp(kelvin, 1000, 40000) / 100.0;

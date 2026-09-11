@@ -73,20 +73,22 @@ public sealed class FilterEngine : IDisposable
         double gammaDim = brightness >= 0.5 ? brightness : 0.5;
         double dimAlpha = brightness < 0.5 ? Math.Clamp(1 - brightness / 0.5, 0, 0.92) : 0;
 
-        bool gammaOk = _gamma.Apply(temp, gammaDim);
-        var (r, g, b) = GammaController.KelvinToChannels(temp);
+        bool gammaOk = _gamma.ApplyWhitePoint(temp, gammaDim);
+        var (pr, pg, pb) = GammaController.WhitePointColor(temp);
+        var (kr, kg, kb) = GammaController.BradfordGains(temp);
 
         System.Windows.Media.Color? tint = null;
         if (!gammaOk)
         {
-            byte a = (byte)Math.Clamp(Math.Round((1 - Math.Min(r, Math.Min(g, b))) * 255), 0, 165);
-            tint = System.Windows.Media.Color.FromArgb(a, (byte)(r * 255), (byte)(g * 255), (byte)(b * 255));
+            byte a = (byte)Math.Clamp(Math.Round((1 - Math.Min(pr / 255.0, Math.Min(pg / 255.0, pb / 255.0))) * 255), 0, 165);
+            tint = System.Windows.Media.Color.FromArgb(a, pr, pg, pb);
             if (brightness < 0.5) dimAlpha = Math.Clamp(1 - brightness, 0, 0.92);
         }
 
         _overlays.Update(tint, dimAlpha);
         Logger.Info($"滤光: {temp:0}K 亮度{brightness * 100:0}% " +
-                    $"gamma={(gammaOk ? "OK" : "拒绝→遮罩兜底")} 遮罩暗度={dimAlpha:0.00}");
+                    $"gamma={(gammaOk ? "OK" : "拒绝→遮罩兜底")} 遮罩暗度={dimAlpha:0.00} " +
+                    $"白点增益 R{kr:F3} G{kg:F3} B{kb:F3} → #{pr:X2}{pg:X2}{pb:X2}");
     }
 
     private void EvaluateSchedule()

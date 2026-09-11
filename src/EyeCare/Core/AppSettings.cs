@@ -6,7 +6,7 @@ public sealed class AppSettings
 {
     // ── 护眼滤光 ──
     public bool FilterEnabled { get; set; } = true;
-    public double ColorTemperature { get; set; } = 4500;
+    public double ColorTemperature { get; set; } = 4800;
     public double Brightness { get; set; } = 100;
     public string SelectedPreset { get; set; } = "暖光";
 

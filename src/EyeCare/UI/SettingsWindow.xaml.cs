@@ -123,8 +123,9 @@ public partial class SettingsWindow : Window
         TxtTempValue.Text = $"{k:0} K";
         TxtBrightValue.Text = $"{SldBright.Value:0} %";
 
-        var (r, g, b) = GammaController.KelvinToChannels(k);
-        var color = Color.FromRgb((byte)(r * 255), (byte)(g * 255), (byte)(b * 255));
+        // 预览色 = 目标色温下的白点等效色,与实际滤光后的白色一致
+        var (r, g, b) = GammaController.WhitePointColor(k);
+        var color = Color.FromRgb(r, g, b);
         PreviewBand.Background = new SolidColorBrush(color);
         double lum = (0.299 * color.R + 0.587 * color.G + 0.114 * color.B) / 255.0;
         var fg = lum > 0.62 ? Color.FromRgb(0x1D, 0x1E, 0x24) : Colors.White;
