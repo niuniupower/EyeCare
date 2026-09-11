@@ -33,8 +33,17 @@ public partial class App : Application
         }
 
         Logger.Info("==== EyeCare 启动 ====");
-        _settings = SettingsStore.Load();
 
+        // 全局异常日志:崩溃可诊断
+        DispatcherUnhandledException += (_, args) =>
+        {
+            Logger.Error("UI 异常: " + args.Exception);
+            args.Handled = false;
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+            Logger.Error("未处理异常: " + args.ExceptionObject);
+
+        _settings = SettingsStore.Load();
         _filter = new FilterEngine(_settings);
         _break = new BreakManager(_settings);
         _tray = new TrayService(_settings);

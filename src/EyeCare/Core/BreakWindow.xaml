@@ -4,19 +4,31 @@
         WindowStyle="None" AllowsTransparency="True" ResizeMode="NoResize"
         ShowInTaskbar="False" ShowActivated="False" Topmost="True"
         Background="Transparent" FontFamily="Microsoft YaHei UI, Segoe UI">
-    <Grid Background="#F2121318">
+    <Grid Background="#F20A0B0F">
         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-            <TextBlock Text="👀" FontSize="52" HorizontalAlignment="Center" Margin="0,0,0,22"/>
-            <TextBlock x:Name="TimeText" Text="0:20" FontSize="96" FontWeight="Light"
-                       Foreground="#FFF5B24E" HorizontalAlignment="Center"/>
+            <Grid Width="280" Height="280" HorizontalAlignment="Center">
+                <!-- 进度圆环 -->
+                <Ellipse x:Name="RingTrack" Stroke="#FF23262F" StrokeThickness="11" StrokeDashCap="Round"/>
+                <Ellipse x:Name="Ring" Stroke="#FFFFB84D" StrokeThickness="11" StrokeDashCap="Round"
+                         RenderTransformOrigin="0.5,0.5">
+                    <Ellipse.Effect>
+                        <DropShadowEffect Color="#FFFF9A3E" BlurRadius="20" ShadowDepth="0" Opacity="0.7"/>
+                    </Ellipse.Effect>
+                    <Ellipse.RenderTransform>
+                        <RotateTransform Angle="-90"/>
+                    </Ellipse.RenderTransform>
+                </Ellipse>
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock Text="休息一下" FontSize="14" Foreground="#FF8E93A3" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="TimeText" Text="0:20" FontSize="64" FontWeight="Light"
+                               Foreground="#FFFFC876" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                </StackPanel>
+            </Grid>
+
             <TextBlock Text="请远眺 6 米外的景物，让眼睛放松一下"
-                       FontSize="17" Foreground="#FFC9CBD3" HorizontalAlignment="Center" Margin="0,14,0,0"/>
-            <Border Width="340" Height="4" CornerRadius="2" Background="#FF2E3138"
-                    HorizontalAlignment="Center" Margin="0,30,0,0">
-                <Border x:Name="Ring" Width="0" HorizontalAlignment="Left" CornerRadius="2" Background="#FFF5B24E"/>
-            </Border>
+                       FontSize="17" Foreground="#FFC9CBD3" HorizontalAlignment="Center" Margin="0,30,0,0"/>
             <Button x:Name="SkipBtn" Content="跳过休息" Style="{StaticResource Btn}"
-                    Width="130" Margin="0,34,0,0" HorizontalAlignment="Center"
+                    Width="132" Margin="0,32,0,0" HorizontalAlignment="Center"
                     Click="Skip_Click"/>
         </StackPanel>
     </Grid>

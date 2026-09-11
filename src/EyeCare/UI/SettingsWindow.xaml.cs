@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using EyeCare.Core;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
@@ -38,6 +39,18 @@ public partial class SettingsWindow : Window
 
         LoadValues();
         _loading = false;
+
+        Loaded += (_, _) => PlayOpenAnimation();
+    }
+
+    private void PlayOpenAnimation()
+    {
+        Opacity = 0;
+        var fadeIn = new DoubleAnimation(1, TimeSpan.FromMilliseconds(240)) { EasingFunction = new CircleEase { EasingMode = EasingMode.EaseOut } };
+        var slide = new ThicknessAnimation(new Thickness(0, 14, 0, -14), new Thickness(0), TimeSpan.FromMilliseconds(240))
+        { EasingFunction = new CircleEase { EasingMode = EasingMode.EaseOut } };
+        BeginAnimation(OpacityProperty, fadeIn);
+        BeginAnimation(MarginProperty, slide);
     }
 
     private void LoadValues()
@@ -367,11 +380,43 @@ public partial class SettingsWindow : Window
 
     private void Nav_Checked(object sender, RoutedEventArgs e)
     {
-        if (sender is not RadioButton { Tag: string tag }) return;
-        FilterPanel.Visibility = tag == "FilterPanel" ? Visibility.Visible : Visibility.Collapsed;
-        BreakPanel.Visibility = tag == "BreakPanel" ? Visibility.Visible : Visibility.Collapsed;
-        GeneralPanel.Visibility = tag == "GeneralPanel" ? Visibility.Visible : Visibility.Collapsed;
+        // XAML 解析中途 NavFilter 的 IsChecked="True" 会触发本事件,此时其他元素尚未创建
+        if (FilterPanel is null || PageTitleText is null) return;
+
+        StackPanel panel;
+        string title, sub;
+        if (sender == NavBreak)
+        {
+            panel = BreakPanel;
+            title = "休息提醒";
+            sub = "20-20-20 法则 · 强制休息 · 智能暂停";
+        }
+        else if (sender == NavGeneral)
+        {
+            panel = GeneralPanel;
+            title = "通用";
+            sub = "开机启动 · 定时节律 · 全局快捷键";
+        }
+        else
+        {
+            panel = FilterPanel;
+            title = "护眼滤光";
+            sub = "蓝光过滤 · 护眼绿 · 暗房,三种色调一键直达";
+        }
+
+        FilterPanel.Visibility = panel == FilterPanel ? Visibility.Visible : Visibility.Collapsed;
+        BreakPanel.Visibility = panel == BreakPanel ? Visibility.Visible : Visibility.Collapsed;
+        GeneralPanel.Visibility = panel == GeneralPanel ? Visibility.Visible : Visibility.Collapsed;
+
+        PageTitleText.Text = title;
+        PageSubText.Text = sub;
+
+        panel.Opacity = 0;
+        panel.BeginAnimation(OpacityProperty,
+            new DoubleAnimation(1, TimeSpan.FromMilliseconds(200)) { EasingFunction = new CircleEase { EasingMode = EasingMode.EaseOut } });
     }
+
+    private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
 
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {

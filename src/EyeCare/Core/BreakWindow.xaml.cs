@@ -62,8 +62,12 @@ public partial class BreakWindow : Window
     public void UpdateRemaining(int sec)
     {
         TimeText.Text = $"{sec / 60}:{Math.Max(0, sec % 60):D2}";
+
+        // 圆环进度:周长 = 2πr,r = (280 - 11) / 2 = 134.5
+        double circumference = 2 * Math.PI * 134.5;
         double progress = Math.Clamp((double)(_session.Duration - sec) / _session.Duration, 0, 1);
-        Ring.Width = 340 * progress;
+        Ring.StrokeDashArray = new System.Windows.Media.DoubleCollection { circumference, circumference };
+        Ring.StrokeDashOffset = -circumference * progress;
 
         if (_session.Force && _session.AllowSkip && _session.Duration - sec >= 3)
             SkipBtn.Visibility = Visibility.Visible;
