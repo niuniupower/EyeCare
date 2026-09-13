@@ -24,6 +24,11 @@ public sealed class FilterEngine : IDisposable
     [DllImport("user32.dll")]
     private static extern bool UnhookWinEvent(IntPtr hWinEventHook);
 
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    private const int SW_HIDE = 0;
+
     private delegate void WinEventDelegate(IntPtr hHook, uint event_, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime);
 
     private readonly AppSettings _settings;
@@ -57,16 +62,19 @@ public sealed class FilterEngine : IDisposable
         _schedule = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
         _schedule.Tick += (_, _) => Apply();
 
-        // WS_POPUP 无边框,并移到屏幕外,避免显示为可见悬浮窗
+        // 纯消息辅助窗口:WS_EX_TOOLWINDOW 排除出任务栏/Alt-Tab,创建后立即隐藏;
+        // 隐藏的顶层窗口仍能收到 WM_DISPLAYCHANGE / WM_POWERBROADCAST 系统广播
         var msgParams = new HwndSourceParameters("EyeCareMsg")
         {
             Width = 0,
             Height = 0,
             WindowStyle = unchecked((int)0x80000000), // WS_POPUP
+            ExtendedWindowStyle = 0x08000080,         // WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW
             PositionX = -32000,
             PositionY = -32000
         };
         _msg = new HwndSource(msgParams);
+        ShowWindow(_msg.Handle, SW_HIDE);
         _msg.AddHook(MsgHook);
 
         _transition = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };

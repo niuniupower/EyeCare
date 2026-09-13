@@ -12,12 +12,16 @@ public sealed class HotkeyManager : IDisposable
     [DllImport("user32.dll")]
     private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
     private const uint MOD_ALT = 0x1;
     private const uint MOD_CONTROL = 0x2;
     private const uint MOD_SHIFT = 0x4;
     private const uint MOD_WIN = 0x8;
     private const uint MOD_NOREPEAT = 0x4000;
     private const int WM_HOTKEY = 0x0312;
+    private const int SW_HIDE = 0;
 
     private readonly HwndSource _src;
     private readonly Dictionary<int, Action> _actions = new();
@@ -25,16 +29,19 @@ public sealed class HotkeyManager : IDisposable
 
     public HotkeyManager()
     {
-        // WS_POPUP 无边框,并移到屏幕外,避免显示为可见悬浮窗
+        // 纯消息辅助窗口:WS_EX_TOOLWINDOW 排除出任务栏/Alt-Tab,创建后立即隐藏;
+        // RegisterHotKey 的 WM_HOTKEY 仍会正常投递到隐藏窗口
         var hotkeyParams = new HwndSourceParameters("EyeCareHotkeys")
         {
             Width = 0,
             Height = 0,
             WindowStyle = unchecked((int)0x80000000), // WS_POPUP
+            ExtendedWindowStyle = 0x08000080,         // WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW
             PositionX = -32000,
             PositionY = -32000
         };
         _src = new HwndSource(hotkeyParams);
+        ShowWindow(_src.Handle, SW_HIDE);
         _src.AddHook(WndProc);
     }
 
