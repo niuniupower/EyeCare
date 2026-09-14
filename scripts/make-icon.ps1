@@ -1,14 +1,16 @@
-# 生成 EyeCare「半落日」应用图标
-# 设计:深色圆角方底 + 琥珀渐变的半落日(地平线裁剪)+ 三条渐弱的倒影波纹
+# 生成「暮瞳 DuskEye」应用图标
+# 设计:暮色深底圆角方 + 琥珀渐变的「D」花押(负空间为一弯新月)
+#      + 左上书法收锋 + 暮星。字母来自英文名 DuskEye,月牙呼应「暮」。
 Add-Type -AssemblyName System.Drawing
 
 function New-IconBitmap([int]$size) {
     $bmp = New-Object System.Drawing.Bitmap($size, $size)
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
     $s = $size / 512.0
 
-    # ── 圆角方形底:深色对角渐变 ──
+    # ── 圆角方底:暮色对角渐变(靛夜 → 近黑) ──
     $r = 110 * $s
     $m = 14 * $s
     $w = $size - 2*$m
@@ -18,43 +20,79 @@ function New-IconBitmap([int]$size) {
     $path.AddArc($m+$w-2*$r, $m+$w-2*$r, 2*$r, 2*$r, 0, 90)
     $path.AddArc($m, $m+$w-2*$r, 2*$r, 2*$r, 90, 90)
     $path.CloseFigure()
-
     $bgGrad = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
         (New-Object System.Drawing.Point(0,0)), (New-Object System.Drawing.Point($size,$size)),
-        [System.Drawing.Color]::FromArgb(255, 27, 22, 17),
-        [System.Drawing.Color]::FromArgb(255, 13, 14, 18))
+        [System.Drawing.Color]::FromArgb(255, 23, 18, 37),
+        [System.Drawing.Color]::FromArgb(255, 11, 12, 16))
     $g.FillPath($bgGrad, $path)
 
-    # ── 太阳外发光(径向渐隐)──
+    # ── 字形后方一团暖光 ──
     $glowPath = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $glowPath.AddEllipse(30*$s, 10*$s, 452*$s, 452*$s)
+    $glowPath.AddEllipse((52*$s), (82*$s), (408*$s), (372*$s))
     $glow = New-Object System.Drawing.Drawing2D.PathGradientBrush($glowPath)
-    $glow.CenterColor = [System.Drawing.Color]::FromArgb(70, 255, 184, 77)
-    $glow.SurroundColors = @([System.Drawing.Color]::FromArgb(0, 255, 184, 77))
+    $glow.CenterColor = [System.Drawing.Color]::FromArgb(42, 255, 231, 176)
+    $glow.SurroundColors = @([System.Drawing.Color]::FromArgb(0, 255, 231, 176))
     $g.FillPath($glow, $glowPath)
 
-    # ── 半落日:渐变圆,地平线(66%)以下裁掉 ──
-    $oldClip = $g.Clip
-    $horizon = [int](338 * $s)
-    $g.SetClip((New-Object System.Drawing.Rectangle(0, 0, $size, $horizon)))
-    $sunGrad = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
-        (New-Object System.Drawing.Point(0, [int](82*$s))), (New-Object System.Drawing.Point(0, $horizon)),
-        [System.Drawing.Color]::FromArgb(255, 255, 227, 168),
-        [System.Drawing.Color]::FromArgb(255, 255, 128, 56))
-    $g.FillEllipse($sunGrad, 112*$s, 82*$s, 288*$s, 288*$s)
-    $g.Clip = $oldClip
+    # ── 「D」花押:外轮廓 + 负空间(evenodd 挖空)──
+    #   整体 -0.05 前倾(斜体势,飘逸);≥48px 负空间 = 新月,≤32px = 圆孔
+    $mtx = New-Object System.Drawing.Drawing2D.Matrix
+    $mtx.Shear(-0.05, 0)
+    $g.Transform = $mtx
 
-    # ── 倒影波纹:三条渐弱的圆角横线 ──
-    $penColors = @(@(130, 255, 184, 77), @(84, 255, 184, 77), @(46, 255, 184, 77))
-    $lineSpecs = @(@(144, 379, 224, 18), @(176, 421, 160, 18), @(208, 462, 96, 16))  # x,y,w,h
-    for ($i = 0; $i -lt 3; $i++) {
-        $c = $penColors[$i]; $sp = $lineSpecs[$i]
-        $pen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb($c[0], $c[1], $c[2], $c[3]), [single]($sp[3]*$s))
-        $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-        $pen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-        $y = ($sp[1] + $sp[3]/2) * $s
-        $g.DrawLine($pen, $sp[0]*$s, $y, ($sp[0]+$sp[2])*$s, $y)
-        $pen.Dispose()
+    $d = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $d.FillMode = [System.Drawing.Drawing2D.FillMode]::Alternate
+    $d.StartFigure()
+    $d.AddBezier((134*$s),(122*$s), (170*$s),(106*$s), (226*$s),(104*$s), (276*$s),(126*$s))
+    $d.AddArc((276-130)*$s, (256-130)*$s, 260*$s, 260*$s, -90, 180)
+    $d.AddBezier((276*$s),(386*$s), (226*$s),(408*$s), (170*$s),(406*$s), (134*$s),(382*$s))
+    $d.AddBezier((134*$s),(382*$s), (121*$s),(298*$s), (121*$s),(206*$s), (134*$s),(122*$s))
+    $d.CloseFigure()
+    $d.StartFigure()
+    if ($size -ge 48) {
+        # 月牙缝负空间:两圆相减出的细新月,贴着碗内壁 —— 字形保持整块「D」,
+        # 缝的 belly 朝右、双角朝左(托盘小尺寸下缝会收没,退化为实心 D,依然清晰)
+        $d.AddArc(184*$s, 164*$s, 184*$s, 184*$s, -116.6, 233.2)
+        $d.AddArc(168*$s, 172*$s, 168*$s, 168*$s, 101.9, -203.8)
+    } else {
+        $d.AddEllipse((278-66)*$s, (256-66)*$s, 132*$s, 132*$s)
+    }
+    $d.CloseFigure()
+
+    $glyphGrad = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
+        (New-Object System.Drawing.Point(0, [int](100*$s))), (New-Object System.Drawing.Point(0, [int](420*$s))),
+        [System.Drawing.Color]::FromArgb(255, 255, 243, 217),
+        [System.Drawing.Color]::FromArgb(255, 255, 138, 61))
+    $glyphGrad.InterpolationColors = New-Object System.Drawing.Drawing2D.ColorBlend
+    $glyphGrad.InterpolationColors.Colors = @(
+        [System.Drawing.Color]::FromArgb(255, 255, 243, 217),
+        [System.Drawing.Color]::FromArgb(255, 255, 196, 106),
+        [System.Drawing.Color]::FromArgb(255, 255, 138, 61))
+    $glyphGrad.InterpolationColors.Positions = @(0.0, 0.45, 1.0)
+    $g.FillPath($glyphGrad, $d)
+
+    # ── 暮星:一颗四角星 + 两粒小星(大尺寸) ──
+    if ($size -ge 48) {
+        $cx = 392*$s; $cy = 84*$s; $a = 28*$s; $b = 7.8*$s
+        $star = New-Object System.Drawing.Drawing2D.GraphicsPath
+        $star.AddPolygon(@(
+            (New-Object System.Drawing.PointF(($cx), ($cy-$a))),
+            (New-Object System.Drawing.PointF(($cx+$b), ($cy-$b))),
+            (New-Object System.Drawing.PointF(($cx+$a), ($cy))),
+            (New-Object System.Drawing.PointF(($cx+$b), ($cy+$b))),
+            (New-Object System.Drawing.PointF(($cx), ($cy+$a))),
+            (New-Object System.Drawing.PointF(($cx-$b), ($cy+$b))),
+            (New-Object System.Drawing.PointF(($cx-$a), ($cy))),
+            (New-Object System.Drawing.PointF(($cx-$b), ($cy-$b)))))
+        $starBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(242, 255, 231, 176))
+        $g.FillPath($starBrush, $star)
+        $starBrush.Dispose()
+
+        $dot = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(153, 255, 231, 176))
+        $g.FillEllipse($dot, (347*$s), (133*$s), (10*$s), (10*$s))
+        $dot2 = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(115, 255, 231, 176))
+        $g.FillEllipse($dot2, (145*$s), (327*$s), (9*$s), (9*$s))
+        $dot.Dispose(); $dot2.Dispose()
     }
 
     $g.Dispose()
@@ -78,6 +116,7 @@ foreach ($sz in $sizes) {
     $ms.Dispose()
 }
 
+# ── 打包多尺寸 ICO(PNG-in-ICO,vista+) ──
 $out = New-Object System.IO.MemoryStream
 $bw = New-Object System.IO.BinaryWriter($out)
 $bw.Write([uint16]0); $bw.Write([uint16]1); $bw.Write([uint16]$pngs.Count)

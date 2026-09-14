@@ -13,6 +13,7 @@ public sealed class TrayService : IDisposable
     private readonly NotifyIcon _icon;
     private readonly AppSettings _settings;
     private readonly ToolStripMenuItem _miFilter;
+    private readonly ToolStripMenuItem _miMode;
     private readonly ToolStripMenuItem _miBreak;
     private readonly ToolStripMenuItem _miAutoStart;
     private readonly ToolStripMenuItem _miTempMenu;
@@ -23,7 +24,7 @@ public sealed class TrayService : IDisposable
     public event Action? ExitRequested;
     public event Action? FilterToggled;
     public event Action? AutoStartToggled;
-    public event Action? TemperatureShortcutSelected;
+    public event Action? FilterShortcutSelected;
 
     public TrayService(AppSettings settings)
     {
@@ -33,7 +34,7 @@ public sealed class TrayService : IDisposable
         _icon = new NotifyIcon
         {
             Icon = _currentIcon,
-            Text = "EyeCare 护眼卫士",
+            Text = "暮瞳 DuskEye",
             Visible = true
         };
 
@@ -47,11 +48,30 @@ public sealed class TrayService : IDisposable
             }
         };
 
+        // 色调模式:色温 / 护眼绿 / 暗房 —— 不必打开主界面即可一键切换
+        _miMode = new ToolStripMenuItem("色调模式");
+        foreach (var (mode, label) in new[]
+                 {
+                     ("temperature", "🌅  色温(暖色)"),
+                     ("green", "🌿  护眼绿"),
+                     ("darkroom", "🟥  暗房")
+                 })
+        {
+            var item = new ToolStripMenuItem(label) { Tag = mode };
+            item.Click += (_, _) =>
+            {
+                if (settings.FilterMode == mode) return;
+                settings.FilterMode = mode;
+                FilterShortcutSelected?.Invoke();
+            };
+            _miMode.DropDownItems.Add(item);
+        }
+
         _miBreak = new ToolStripMenuItem("立即休息") { Enabled = settings.BreakEnabled };
         _miBreak.Click += (_, _) => BreakNow?.Invoke();
 
         // 色温快捷切换(与 f.lux 官方预设一致;点选后自动切回色温模式)
-        _miTempMenu = new ToolStripMenuItem("色温切换");
+        _miTempMenu = new ToolStripMenuItem("色温预设");
         foreach (var t in new[] { 1900, 2300, 2700, 3400, 4200, 4800, 5500, 6500 })
         {
             var item = new ToolStripMenuItem($"{t} K") { Tag = (double)t };
@@ -59,7 +79,7 @@ public sealed class TrayService : IDisposable
             {
                 _settings.FilterMode = "temperature";
                 _settings.ColorTemperature = (double)item.Tag!;
-                TemperatureShortcutSelected?.Invoke();
+                FilterShortcutSelected?.Invoke();
             };
             _miTempMenu.DropDownItems.Add(item);
         }
@@ -74,7 +94,9 @@ public sealed class TrayService : IDisposable
             }
         };
 
-        var miSettings = new ToolStripMenuItem("设置…");
+        // 主界面入口:置顶到菜单最上方并加粗,单击托盘图标同样直达
+        var miSettings = new ToolStripMenuItem("打开主界面");
+        miSettings.Font = new Font(miSettings.Font, System.Drawing.FontStyle.Bold);
         miSettings.Click += (_, _) => OpenSettings?.Invoke();
 
         var miExit = new ToolStripMenuItem("退出");
@@ -83,17 +105,24 @@ public sealed class TrayService : IDisposable
         _icon.ContextMenuStrip = new ContextMenuStrip();
         _icon.ContextMenuStrip.Items.AddRange(
         [
+            miSettings,
+            new ToolStripSeparator(),
             _miFilter,
+            _miMode,
             _miTempMenu,
             new ToolStripSeparator(),
             _miBreak,
             new ToolStripSeparator(),
-            miSettings,
             _miAutoStart,
             new ToolStripSeparator(),
             miExit
         ]);
 
+        // 单击 = 打开(并前置)主界面;双击兼容保留
+        _icon.MouseClick += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Left) OpenSettings?.Invoke();
+        };
         _icon.DoubleClick += (_, _) => OpenSettings?.Invoke();
     }
 
@@ -107,10 +136,13 @@ public sealed class TrayService : IDisposable
         if (_miAutoStart.Checked != settings.AutoStart)
             _miAutoStart.Checked = settings.AutoStart;
 
+        foreach (ToolStripMenuItem it in _miMode.DropDownItems)
+            it.Checked = settings.FilterMode == (string)it.Tag!;
+
         foreach (ToolStripMenuItem it in _miTempMenu.DropDownItems)
             it.Checked = settings.FilterMode == "temperature" && (double)it.Tag! == settings.ColorTemperature;
 
-        string tip = $"EyeCare 护眼卫士 · 滤光{(settings.FilterEnabled ? "开" : "关")}\n{status}";
+        string tip = $"暮瞳 DuskEye · 滤光{(settings.FilterEnabled ? "开" : "关")}\n{status}";
         if (_icon.Text != tip && tip.Length <= 63)
             _icon.Text = tip;
     }
@@ -122,45 +154,52 @@ public sealed class TrayService : IDisposable
         _icon.ShowBalloonTip(4000);
     }
 
-    /// <summary>托盘图标:与主图标同款的「半落日」设计;滤光开启=琥珀色,关闭=灰色</summary>
+    /// <summary>托盘图标:与主图标同源的「D」花押;滤光开启=琥珀渐变,关闭=灰色</summary>
     private static Icon MakeIcon(bool filterOn)
     {
-        var sun = filterOn ? Color.FromArgb(255, 205, 130, 70) : Color.FromArgb(128, 134, 145);
         using var bmp = new Bitmap(32, 32);
         using (var g = Graphics.FromImage(bmp))
         {
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+            float s = 32f / 512f;
 
-            // 深色圆角方底
+            // 暮色圆角方底
             using (var bgPath = new System.Drawing.Drawing2D.GraphicsPath())
             {
-                bgPath.AddArc(2, 2, 10, 10, 180, 90);
-                bgPath.AddArc(20, 2, 10, 10, 270, 90);
-                bgPath.AddArc(20, 20, 10, 10, 0, 90);
-                bgPath.AddArc(2, 20, 10, 10, 90, 90);
+                float m = 14 * s, r = 110 * s, w = 32 - 2 * m;
+                bgPath.AddArc(m, m, 2 * r, 2 * r, 180, 90);
+                bgPath.AddArc(m + w - 2 * r, m, 2 * r, 2 * r, 270, 90);
+                bgPath.AddArc(m + w - 2 * r, m + w - 2 * r, 2 * r, 2 * r, 0, 90);
+                bgPath.AddArc(m, m + w - 2 * r, 2 * r, 2 * r, 90, 90);
                 bgPath.CloseFigure();
-                using var bg = new SolidBrush(Color.FromArgb(32, 34, 42));
+                Brush bg = filterOn
+                    ? new System.Drawing.Drawing2D.LinearGradientBrush(
+                        new Rectangle(0, 0, 32, 32),
+                        Color.FromArgb(255, 23, 18, 37), Color.FromArgb(255, 11, 12, 16), 45f)
+                    : new SolidBrush(Color.FromArgb(255, 34, 37, 46));
                 g.FillPath(bg, bgPath);
+                bg.Dispose();
             }
 
-            // 半落日(地平线 y=21 以下裁掉)
-            g.SetClip(new Rectangle(0, 0, 32, 21));
-            using var sunBrush = new SolidBrush(sun);
-            g.FillEllipse(sunBrush, 8, 6, 16, 16);
-            g.ResetClip();
+            // 「D」花押:外轮廓 + 圆孔负空间(托盘小尺寸下月牙缝看不清,用圆孔)
+            using (var d = new System.Drawing.Drawing2D.GraphicsPath())
+            {
+                d.FillMode = System.Drawing.Drawing2D.FillMode.Alternate;
+                d.StartFigure();
+                d.AddBezier(134 * s, 122 * s, 170 * s, 106 * s, 226 * s, 104 * s, 276 * s, 126 * s);
+                d.AddArc((276 - 130) * s, (256 - 130) * s, 260 * s, 260 * s, -90, 180);
+                d.AddBezier(276 * s, 386 * s, 226 * s, 408 * s, 170 * s, 406 * s, 134 * s, 382 * s);
+                d.AddBezier(134 * s, 382 * s, 121 * s, 298 * s, 121 * s, 206 * s, 134 * s, 122 * s);
+                d.CloseFigure();
+                d.AddEllipse((278 - 66) * s, (256 - 66) * s, 132 * s, 132 * s);
 
-            // 倒影波纹两条
-            using (var pen1 = new Pen(Color.FromArgb(150, sun), 2.4f))
-            {
-                pen1.StartCap = System.Drawing.Drawing2D.LineCap.Round;
-                pen1.EndCap = System.Drawing.Drawing2D.LineCap.Round;
-                g.DrawLine(pen1, 10, 25, 22, 25);
-            }
-            using (var pen2 = new Pen(Color.FromArgb(80, sun), 2.4f))
-            {
-                pen2.StartCap = System.Drawing.Drawing2D.LineCap.Round;
-                pen2.EndCap = System.Drawing.Drawing2D.LineCap.Round;
-                g.DrawLine(pen2, 12, 29, 20, 29);
+                Brush glyph = filterOn
+                    ? new System.Drawing.Drawing2D.LinearGradientBrush(
+                        new Rectangle(0, 0, 32, 32),
+                        Color.FromArgb(255, 255, 243, 217), Color.FromArgb(255, 255, 138, 61), 90f)
+                    : new SolidBrush(Color.FromArgb(235, 154, 160, 172));
+                g.FillPath(glyph, d);
+                glyph.Dispose();
             }
         }
         return Icon.FromHandle(bmp.GetHicon());

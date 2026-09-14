@@ -22,7 +22,8 @@ public static class AutoStartManager
             {
                 var exe = Environment.ProcessPath;
                 if (string.IsNullOrEmpty(exe)) return;
-                key.SetValue(AppName, $"\"{exe}\"");
+                // 带 --silent:开机时静默驻留托盘,不弹出主界面打扰
+                key.SetValue(AppName, $"\"{exe}\" --silent");
             }
             else
             {
@@ -33,6 +34,31 @@ public static class AutoStartManager
         catch (Exception ex)
         {
             Logger.Error("设置开机自启失败: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 旧版本写入的启动项没有 --silent,开机时会弹出主界面。
+    /// 启动时调用本方法把命令行升级到当前格式(顺带修正 exe 路径变动)。
+    /// </summary>
+    public static void EnsureUpToDate()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
+            if (key?.GetValue(AppName) is not string current) return;
+            var exe = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(exe)) return;
+
+            var wanted = $"\"{exe}\" --silent";
+            if (current.Trim() == wanted) return;
+
+            key.SetValue(AppName, wanted);
+            Logger.Info("开机自启命令已升级为静默启动");
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("升级开机自启失败: " + ex.Message);
         }
     }
 }

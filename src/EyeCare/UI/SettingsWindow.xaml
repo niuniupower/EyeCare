@@ -1,326 +1,577 @@
 <Window x:Class="EyeCare.UI.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="EyeCare 设置" Width="780" Height="640"
+        Title="暮瞳 DuskEye" Width="880" Height="676"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ResizeMode="NoResize" WindowStartupLocation="CenterScreen"
         FontFamily="Microsoft YaHei UI, Segoe UI">
-    <Border CornerRadius="16" Background="{StaticResource WindowBackground}"
-            BorderBrush="{StaticResource Line}" BorderThickness="1">
+    <!-- ═══ 背景三层:① BgLayer 背景来源(渐变/图片/桌面)② ScrimLayer 遮罩浓度 ③ 里面的哑光卡片 ═══
+         BgLayer 用 Background 画刷而不是 Image 元素:圆角由 Border 自己裁,窗口四角永远是干净的,
+         也顺带避开了「元素级模糊把圆角糊掉」的问题(模糊在 BackgroundStore 里对像素做)。 -->
+    <Border x:Name="RootGlass" CornerRadius="18" Background="Transparent"
+            BorderBrush="#1AFFFFFF" BorderThickness="1">
+        <Border.Clip>
+            <!-- 窗口不可缩放,尺寸固定,直接写死裁切矩形 -->
+            <RectangleGeometry Rect="0,0,880,676" RadiusX="18" RadiusY="18"/>
+        </Border.Clip>
         <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="182"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
+            <!-- ── ① 背景来源 ── -->
+            <Border x:Name="BgLayer" CornerRadius="18" Background="{StaticResource WindowBackground}"/>
 
-            <!-- ═══ 左侧导航 ═══ -->
-            <Border Grid.Column="0" Background="{StaticResource PanelBg}"
-                    BorderBrush="{StaticResource Line}" BorderThickness="0,0,1,0"
-                    CornerRadius="16,0,0,16">
-                <Grid>
+            <!-- ── ② 遮罩:Opacity 由「外观」页的浓度滑杆控制,把背景压到不刺眼 ── -->
+            <Border x:Name="ScrimLayer" CornerRadius="18" Background="{StaticResource ScrimGlass}" Opacity="0"/>
+
+            <!-- ── 装饰层:两团极淡柔光(已收敛到上一版的一半,不参与命中) ── -->
+            <Ellipse x:Name="AuroraWarmLayer" Width="520" Height="520" IsHitTestVisible="False"
+                     Fill="{StaticResource AuroraWarm}" HorizontalAlignment="Right"
+                     VerticalAlignment="Top" Margin="0,-250,-200,0"/>
+            <Ellipse x:Name="AuroraCoolLayer" Width="620" Height="620" IsHitTestVisible="False"
+                     Fill="{StaticResource AuroraCool}" HorizontalAlignment="Left"
+                     VerticalAlignment="Bottom" Margin="-250,0,0,-350"/>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- ═══ 左侧导航(烟熏玻璃) ═══ -->
+                <Border Grid.Column="0" Background="{StaticResource GlassRailFill}"
+                        BorderBrush="#1AFFFFFF" BorderThickness="0,0,1,0" CornerRadius="18,0,0,18">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="84"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
+                            <Border Width="38" Height="38" CornerRadius="12" Background="{StaticResource BrandTileBg}">
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#FFFFB84D" BlurRadius="14" ShadowDepth="0" Opacity="0.28"/>
+                                </Border.Effect>
+                                <Grid>
+                                    <!-- 「D」花押:负空间为一弯新月,与图标同源(StreamGeometry 默认 EvenOdd) -->
+                                    <Path Fill="{StaticResource BrandGlyph}"
+                                          Data="M 9.9 9.1 C 12.6 7.9, 16.8 7.7, 20.5 9.4 A 9.65 9.65 0 0 1 20.5 28.6 C 16.8 30.3, 12.6 30.1, 9.9 28.3 C 9.0 22.1, 9.0 15.3, 9.9 9.1 Z M 17.4 12.9 A 6.83 6.83 0 1 1 17.4 25.1 A 6.24 6.24 0 1 0 17.4 12.9 Z"/>
+                                    <!-- 暮星 -->
+                                    <Path Fill="#F2FFE7B0"
+                                          Data="M 29.1 4.1 L 29.7 5.6 L 31.2 6.2 L 29.7 6.8 L 29.1 8.3 L 28.5 6.8 L 27.0 6.2 L 28.5 5.6 Z"/>
+                                </Grid>
+                            </Border>
+                            <StackPanel Margin="11,0,0,0" VerticalAlignment="Center">
+                                <TextBlock Text="暮瞳" FontSize="15" FontWeight="Bold" Foreground="{StaticResource Text}"/>
+                                <TextBlock Text="DuskEye" FontSize="11" Foreground="{StaticResource SubText}" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <StackPanel Grid.Row="1" Margin="0,10,0,0">
+                            <RadioButton x:Name="NavFilter" Style="{StaticResource NavItem}" Content="护眼滤光"
+                                         Tag="&#xE790;" IsChecked="True" Checked="Nav_Checked"/>
+                            <RadioButton x:Name="NavBreak" Style="{StaticResource NavItem}" Content="休息提醒"
+                                         Tag="&#xE916;" Checked="Nav_Checked"/>
+                            <RadioButton x:Name="NavLook" Style="{StaticResource NavItem}" Content="外观"
+                                         Tag="&#xE8B9;" Checked="Nav_Checked"/>
+                            <RadioButton x:Name="NavGeneral" Style="{StaticResource NavItem}" Content="通用"
+                                         Tag="&#xE713;" Checked="Nav_Checked"/>
+                        </StackPanel>
+
+                        <!-- 当前状态胶囊:不进内容区也能看到滤光开没开、多少 K -->
+                        <Border Grid.Row="3" Style="{StaticResource StatusPill}" Margin="14,0,14,12">
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse x:Name="DotRailStatus" Width="7" Height="7" VerticalAlignment="Center"
+                                         Fill="{StaticResource Accent}"/>
+                                <TextBlock x:Name="TxtRailStatus" Text="正在读取…" Margin="8,0,0,0" FontSize="11.5"
+                                           VerticalAlignment="Center" Foreground="{StaticResource SubText}"
+                                           TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Grid.Row="4" Text="v1.7.0 · 本地运行" FontSize="11" Foreground="#FF5C6170"
+                                   Margin="20,0,0,18"/>
+                    </Grid>
+                </Border>
+
+                <!-- ═══ 右侧内容 ═══ -->
+                <Grid Grid.Column="1">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="76"/>
+                        <RowDefinition Height="46"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
-                    <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0">
-                        <Border Width="38" Height="38" CornerRadius="12" Background="{StaticResource AccentGradient}">
-                            <Border.Effect>
-                                <DropShadowEffect Color="#FFFF9A3E" BlurRadius="18" ShadowDepth="0" Opacity="0.5"/>
-                            </Border.Effect>
-                            <Grid>
-                                <!-- 负空间:半落日(裁掉下缘) -->
-                                <Grid Height="19" VerticalAlignment="Top" Margin="0,6,0,0" ClipToBounds="True">
-                                    <Ellipse Width="26" Height="26" HorizontalAlignment="Center" VerticalAlignment="Top"
-                                             Fill="#FF2A1B08"/>
-                                </Grid>
-                                <!-- 倒影波纹 -->
-                                <Rectangle Width="18" Height="2.6" RadiusX="1.3" RadiusY="1.3"
-                                           HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                                           Margin="0,0,0,7.5" Fill="#CC2A1B08"/>
-                                <Rectangle Width="11" Height="2.6" RadiusX="1.3" RadiusY="1.3"
-                                           HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                                           Margin="0,0,0,3.5" Fill="#772A1B08"/>
-                            </Grid>
-                        </Border>
-                        <StackPanel Margin="11,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="EyeCare" FontSize="15" FontWeight="Bold" Foreground="{StaticResource Text}"/>
-                            <TextBlock Text="护眼卫士" FontSize="11" Foreground="{StaticResource SubText}" Margin="0,2,0,0"/>
+                    <!-- 标题栏(拖动区) -->
+                    <Grid Grid.Row="0" Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                    Margin="0,0,8,0">
+                            <Button Style="{StaticResource WinBtn}" Content="&#xE921;" FontFamily="Segoe MDL2 Assets"
+                                    Click="Minimize_Click"/>
+                            <Button Style="{StaticResource WinCloseBtn}" Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets"
+                                    Margin="4,0,0,0" Click="Close_Click"/>
                         </StackPanel>
+                    </Grid>
+
+                    <!-- 页头 -->
+                    <StackPanel Grid.Row="1" Margin="24,0,24,14">
+                        <TextBlock x:Name="PageTitleText" Text="护眼滤光" Style="{StaticResource PageTitle}"/>
+                        <TextBlock x:Name="PageSubText" Text="蓝光过滤 · 护眼绿 · 暗房,三种色调一键直达"
+                                   Foreground="{StaticResource SubText}" FontSize="12.5" Margin="0,5,0,0"/>
                     </StackPanel>
 
-                    <StackPanel Grid.Row="1" Margin="0,8,0,0">
-                        <RadioButton x:Name="NavFilter" Style="{StaticResource NavItem}" Content="护眼滤光"
-                                     Tag="&#xE790;" IsChecked="True" Checked="Nav_Checked"/>
-                        <RadioButton x:Name="NavBreak" Style="{StaticResource NavItem}" Content="休息提醒"
-                                     Tag="&#xE916;" Checked="Nav_Checked"/>
-                        <RadioButton x:Name="NavGeneral" Style="{StaticResource NavItem}" Content="通用"
-                                     Tag="&#xE713;" Checked="Nav_Checked"/>
-                    </StackPanel>
-
-                    <StackPanel Grid.Row="3" Margin="20,0,0,18">
-                        <TextBlock Text="v1.3.0 · 本地运行" FontSize="11" Foreground="#FF5C6170"/>
-                    </StackPanel>
-                </Grid>
-            </Border>
-
-            <!-- ═══ 右侧内容 ═══ -->
-            <Grid Grid.Column="1">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="50"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
-
-                <!-- 右上光晕装饰 -->
-                <Rectangle Grid.RowSpan="3" Fill="{StaticResource GlowTop}" IsHitTestVisible="False"
-                           HorizontalAlignment="Right" VerticalAlignment="Top" Width="420" Height="300"/>
-
-                <!-- 标题栏(拖动区) -->
-                <Grid Grid.Row="0" Background="Transparent" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"
-                                Margin="0,0,10,0">
-                        <Button Style="{StaticResource WinBtn}" Content="&#xE921;" FontFamily="Segoe MDL2 Assets"
-                                Click="Minimize_Click"/>
-                        <Button Style="{StaticResource WinCloseBtn}" Content="&#xE8BB;" FontFamily="Segoe MDL2 Assets"
-                                Margin="4,0,0,0" Click="Close_Click"/>
-                    </StackPanel>
-                </Grid>
-
-                <!-- 页头 -->
-                <StackPanel Grid.Row="1" Margin="26,4,26,14">
-                    <TextBlock x:Name="PageTitleText" Text="护眼滤光" Style="{StaticResource PageTitle}"/>
-                    <TextBlock x:Name="PageSubText" Text="蓝光过滤 · 护眼绿 · 暗房,三种色调一键直达"
-                               Foreground="{StaticResource SubText}" FontSize="12.5" Margin="0,5,0,0"/>
-                </StackPanel>
-
-                <!-- 内容区 -->
-                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="26,0,26,22">
-                    <Grid>
-                        <!-- ═══ 护眼滤光 ═══ -->
-                        <StackPanel x:Name="FilterPanel">
-                            <Border Style="{StaticResource CardBox}" Margin="0,0,0,14">
-                                <StackPanel>
-                                    <CheckBox x:Name="ChkFilter" Style="{StaticResource Switch}"
-                                              Content="启用护眼滤光" Checked="ChkFilter_Changed" Unchecked="ChkFilter_Changed"/>
-                                    <TextBlock Text="在显卡 gamma 查找表(GPU 层面)完成色调变换,截图与录屏不受影响,文字保持锐利。"
-                                               Style="{StaticResource Hint}" Margin="0,10,0,0"/>
-
-                                    <TextBlock Text="色调模式" Style="{StaticResource CardTitle}" Margin="0,18,0,0"/>
-                                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                                        <RadioButton x:Name="ModeTemp" Style="{StaticResource PresetChip}" Content="🌅 暖色色温"
-                                                     Checked="Mode_Checked" Tag="temperature"/>
-                                        <RadioButton x:Name="ModeGreen" Style="{StaticResource PresetChip}" Content="🌿 护眼绿"
-                                                     Checked="Mode_Checked" Tag="green"/>
-                                        <RadioButton x:Name="ModeDarkroom" Style="{StaticResource PresetChip}" Content="🟥 暗房"
-                                                     Checked="Mode_Checked" Tag="darkroom"/>
-                                    </StackPanel>
-
-                                    <StackPanel x:Name="GrnSection" Visibility="Collapsed" Margin="0,18,0,0">
-                                        <Grid>
-                                            <TextBlock Text="绿度" Style="{StaticResource CardTitle}"/>
-                                            <TextBlock x:Name="TxtGreenValue" Text="100 %" HorizontalAlignment="Right"
-                                                       Style="{StaticResource ValueText}"/>
-                                        </Grid>
-                                        <Slider x:Name="SldGreen" Style="{StaticResource ModernSlider}" Margin="0,12,0,0"
-                                                Minimum="10" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True"
-                                                ValueChanged="Sld_ValueChanged"/>
-                                        <TextBlock Text="100% 为经典豆沙绿(白色背景呈现柔和的暖绿色),调低则更接近原色。"
-                                                   Style="{StaticResource Hint}" Margin="0,10,0,0"/>
-                                    </StackPanel>
-
-                                    <Border x:Name="PreviewBand" CornerRadius="12" Padding="18,14" Margin="0,18,0,0"
-                                            Background="{StaticResource Card}" BorderBrush="{StaticResource Line}"
-                                            BorderThickness="1">
-                                        <StackPanel>
-                                            <TextBlock Text="预览 · EyeCare 护眼卫士" FontSize="15" FontWeight="SemiBold"
-                                                       x:Name="PreviewTitle"/>
-                                            <TextBlock Text="The quick brown fox jumps over the lazy dog 0123456789"
-                                                       FontSize="12" Opacity="0.85" Margin="0,4,0,0" x:Name="PreviewSub"/>
-                                        </StackPanel>
-                                    </Border>
-                                </StackPanel>
-                            </Border>
-
-                            <Border x:Name="TempSection" Style="{StaticResource CardBox}" Margin="0,0,0,14">
-                                <StackPanel>
-                                    <Grid>
-                                        <TextBlock Text="色温" Style="{StaticResource CardTitle}"/>
-                                        <TextBlock x:Name="TxtTempValue" Text="4800 K" HorizontalAlignment="Right"
-                                                   Style="{StaticResource ValueText}"/>
-                                    </Grid>
-                                    <Slider x:Name="SldTemp" Style="{StaticResource ModernSlider}" Margin="0,12,0,0"
-                                            Minimum="1500" Maximum="6500" TickFrequency="50" IsSnapToTickEnabled="True"
-                                            ValueChanged="Sld_ValueChanged"/>
-
-                                    <TextBlock Text="色彩预设(与 f.lux 官方色温一致)" Style="{StaticResource Hint}" Margin="0,14,0,0"/>
-                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                        <RadioButton x:Name="PresetCandle" Style="{StaticResource PresetChip}" Content="🕯 烛光 1900K"
-                                                     Checked="Preset_Checked" Tag="1900"/>
-                                        <RadioButton x:Name="PresetDusk" Style="{StaticResource PresetChip}" Content="🌇 暮色 2300K"
-                                                     Checked="Preset_Checked" Tag="2300"/>
-                                        <RadioButton x:Name="PresetIncandescent" Style="{StaticResource PresetChip}" Content="💡 白炽 2700K"
-                                                     Checked="Preset_Checked" Tag="2700"/>
-                                        <RadioButton x:Name="PresetNight" Style="{StaticResource PresetChip}" Content="🌙 夜间 3400K"
-                                                     Checked="Preset_Checked" Tag="3400"/>
-                                    </StackPanel>
-                                    <StackPanel Orientation="Horizontal">
-                                        <RadioButton x:Name="PresetWarm" Style="{StaticResource PresetChip}" Content="🕯 暖光 4200K"
-                                                     Checked="Preset_Checked" Tag="4200"/>
-                                        <RadioButton x:Name="PresetCozy" Style="{StaticResource PresetChip}" Content="🛋 舒适 4800K"
-                                                     Checked="Preset_Checked" Tag="4800"/>
-                                        <RadioButton x:Name="PresetSunlight" Style="{StaticResource PresetChip}" Content="☀ 日光 5500K"
-                                                     Checked="Preset_Checked" Tag="5500"/>
-                                        <RadioButton x:Name="PresetRead" Style="{StaticResource PresetChip}" Content="📖 阅读 5800K"
-                                                     Checked="Preset_Checked" Tag="5800"/>
-                                    </StackPanel>
-
-                                    <TextBlock Text="场景模式(一键切换色温 + 亮度组合)" Style="{StaticResource Hint}" Margin="0,16,0,0"/>
-                                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                        <RadioButton Style="{StaticResource PresetChip}" Content="🎮 游戏 5800K·100%"
-                                                     Checked="Scene_Click" Tag="5800,100"/>
-                                        <RadioButton Style="{StaticResource PresetChip}" Content="🎬 影院 4200K·80%"
-                                                     Checked="Scene_Click" Tag="4200,80"/>
-                                        <RadioButton Style="{StaticResource PresetChip}" Content="📖 阅读 4000K·90%"
-                                                     Checked="Scene_Click" Tag="4000,90"/>
-                                        <RadioButton Style="{StaticResource PresetChip}" Content="🌙 加班 3400K·70%"
-                                                     Checked="Scene_Click" Tag="3400,70"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Style="{StaticResource CardBox}">
-                                <StackPanel>
-                                    <Grid>
-                                        <TextBlock Text="屏幕亮度" Style="{StaticResource CardTitle}"/>
-                                        <TextBlock x:Name="TxtBrightValue" Text="100 %" HorizontalAlignment="Right"
-                                                   Style="{StaticResource ValueText}"/>
-                                    </Grid>
-                                    <Slider x:Name="SldBright" Style="{StaticResource ModernSlider}" Margin="0,12,0,0"
-                                            Minimum="10" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True"
-                                            ValueChanged="Sld_ValueChanged"/>
-                                    <TextBlock Text="调节范围 10%–100%。低于 50% 时自动启用遮罩加深模式,实现更深的调暗。"
-                                               Style="{StaticResource Hint}" Margin="0,10,0,0"/>
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
-
-                        <!-- ═══ 休息提醒 ═══ -->
-                        <StackPanel x:Name="BreakPanel" Visibility="Collapsed">
-                            <Border Style="{StaticResource CardBox}" Margin="0,0,0,14">
-                                <StackPanel>
-                                    <CheckBox x:Name="ChkBreak" Style="{StaticResource Switch}"
-                                              Content="启用休息提醒" Checked="ChkBreak_Changed" Unchecked="ChkBreak_Changed"/>
-                                    <TextBlock Text="遵循 20-20-20 护眼法则:每 20 分钟,远眺 20 英尺(约 6 米)外的物体 20 秒。"
-                                               Style="{StaticResource Hint}" Margin="0,10,0,0"/>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Style="{StaticResource CardBox}" Margin="0,0,0,14">
-                                <StackPanel>
+                    <!-- 内容区:滚动条再往内缩 8px,避免压到圆角玻璃 -->
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Margin="0,0,8,4"
+                                  Padding="24,0,18,8">
+                        <Grid>
+                            <!-- ═══════════ 护眼滤光 ═══════════ -->
+                            <StackPanel x:Name="FilterPanel">
+                                <!-- Hero:开关 + 当前状态 + 实时预览 -->
+                                <Border Style="{StaticResource HeroCard}" Margin="0,0,0,14">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="236"/>
                                         </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0">
-                                            <TextBlock Text="每隔多少分钟提醒" Style="{StaticResource CardTitle}"/>
-                                            <TextBox x:Name="BoxInterval" Style="{StaticResource DarkBox}" Width="92"
-                                                     HorizontalAlignment="Left" Margin="0,10,0,0"
-                                                     LostFocus="Num_LostFocus" KeyDown="Num_KeyDown"/>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <CheckBox x:Name="ChkFilter" Style="{StaticResource Switch}"
+                                                      Content="启用护眼滤光" Checked="ChkFilter_Changed" Unchecked="ChkFilter_Changed"/>
+                                            <StackPanel Orientation="Horizontal" Margin="0,13,0,0">
+                                                <Ellipse x:Name="DotHero" Width="7" Height="7" VerticalAlignment="Center"
+                                                         Fill="{StaticResource Accent}"/>
+                                                <TextBlock x:Name="TxtHeroSummary" Text="暖色色温 · 4800 K · 亮度 100 %"
+                                                           Margin="8,0,0,0" FontSize="15" FontWeight="SemiBold"
+                                                           VerticalAlignment="Center" Foreground="{StaticResource Text}"/>
+                                            </StackPanel>
+                                            <TextBlock Text="在显卡 gamma 层完成色调变换,截图与录屏不受影响。"
+                                                       Style="{StaticResource Hint}" Margin="0,10,0,0"/>
                                         </StackPanel>
-                                        <StackPanel Grid.Column="1">
-                                            <TextBlock Text="休息时长(秒)" Style="{StaticResource CardTitle}"/>
-                                            <TextBox x:Name="BoxDuration" Style="{StaticResource DarkBox}" Width="92"
-                                                     HorizontalAlignment="Left" Margin="0,10,0,0"
-                                                     LostFocus="Num_LostFocus" KeyDown="Num_KeyDown"/>
+                                        <Border x:Name="PreviewBand" Grid.Column="1" CornerRadius="12" Padding="16,12"
+                                                Margin="18,0,0,0" BorderBrush="#26FFFFFF" BorderThickness="1">
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock Text="预览 · 暮瞳 DuskEye" FontSize="13.5" FontWeight="SemiBold"
+                                                           x:Name="PreviewTitle"/>
+                                                <TextBlock Text="The quick brown fox 0123456789"
+                                                           FontSize="11.5" Opacity="0.9" Margin="0,5,0,0"
+                                                           TextWrapping="Wrap" x:Name="PreviewSub"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </Grid>
+                                </Border>
+
+                                <!-- 两栏栅格:左=色调主控,右=强度与场景 -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="14"/>
+                                        <ColumnDefinition Width="296"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0">
+                                        <Border Style="{StaticResource CardBox}" Margin="0,0,0,14">
+                                            <StackPanel>
+                                                <TextBlock Text="色调模式" Style="{StaticResource CardTitle}"/>
+                                                <WrapPanel Margin="0,11,0,0">
+                                                    <RadioButton x:Name="ModeTemp" Style="{StaticResource PresetChip}" Content="🌅 暖色色温"
+                                                                 Checked="Mode_Checked" Tag="temperature"/>
+                                                    <RadioButton x:Name="ModeGreen" Style="{StaticResource PresetChip}" Content="🌿 护眼绿"
+                                                                 Checked="Mode_Checked" Tag="green"/>
+                                                    <RadioButton x:Name="ModeDarkroom" Style="{StaticResource PresetChip}" Content="🟥 暗房"
+                                                                 Checked="Mode_Checked" Tag="darkroom"/>
+                                                </WrapPanel>
+                                                <TextBlock Text="暖色微调白点;护眼绿、暗房为整体色调变换。"
+                                                           Style="{StaticResource Hint}" Margin="0,2,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border x:Name="TempSection" Style="{StaticResource CardBox}">
+                                            <StackPanel>
+                                                <Grid>
+                                                    <TextBlock Text="色温" Style="{StaticResource CardTitle}"/>
+                                                    <TextBlock x:Name="TxtTempValue" Text="4800 K" HorizontalAlignment="Right"
+                                                               Style="{StaticResource ValueText}"/>
+                                                </Grid>
+                                                <Slider x:Name="SldTemp" Style="{StaticResource ModernSlider}" Margin="0,10,0,0"
+                                                        Minimum="1500" Maximum="6500" TickFrequency="50" IsSnapToTickEnabled="True"
+                                                        ValueChanged="Sld_ValueChanged"/>
+                                                <TextBlock Text="色彩预设(与 f.lux 官方色温一致)" Style="{StaticResource Hint}"
+                                                           Margin="0,14,0,0"/>
+                                                <!-- 等宽两列:比 WrapPanel 的自由换行整齐,右侧不再参差 -->
+                                                <UniformGrid Columns="2" Margin="0,8,0,0">
+                                                    <RadioButton x:Name="PresetCandle" Style="{StaticResource PresetChip}" Content="🕯 烛光 1900K"
+                                                                 Checked="Preset_Checked" Tag="1900"/>
+                                                    <RadioButton x:Name="PresetDusk" Style="{StaticResource PresetChip}" Content="🌇 暮色 2300K"
+                                                                 Checked="Preset_Checked" Tag="2300"/>
+                                                    <RadioButton x:Name="PresetIncandescent" Style="{StaticResource PresetChip}" Content="💡 白炽 2700K"
+                                                                 Checked="Preset_Checked" Tag="2700"/>
+                                                    <RadioButton x:Name="PresetNight" Style="{StaticResource PresetChip}" Content="🌙 夜间 3400K"
+                                                                 Checked="Preset_Checked" Tag="3400"/>
+                                                    <RadioButton x:Name="PresetWarm" Style="{StaticResource PresetChip}" Content="🕯 暖光 4200K"
+                                                                 Checked="Preset_Checked" Tag="4200"/>
+                                                    <RadioButton x:Name="PresetCozy" Style="{StaticResource PresetChip}" Content="🛋 舒适 4800K"
+                                                                 Checked="Preset_Checked" Tag="4800"/>
+                                                    <RadioButton x:Name="PresetSunlight" Style="{StaticResource PresetChip}" Content="☀ 日光 5500K"
+                                                                 Checked="Preset_Checked" Tag="5500"/>
+                                                    <RadioButton x:Name="PresetRead" Style="{StaticResource PresetChip}" Content="📖 阅读 5800K"
+                                                                 Checked="Preset_Checked" Tag="5800"/>
+                                                </UniformGrid>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- 护眼绿模式下顶替色温卡的位置 -->
+                                        <Border x:Name="GrnSection" Style="{StaticResource CardBox}" Visibility="Collapsed">
+                                            <StackPanel>
+                                                <Grid>
+                                                    <TextBlock Text="绿度" Style="{StaticResource CardTitle}"/>
+                                                    <TextBlock x:Name="TxtGreenValue" Text="100 %" HorizontalAlignment="Right"
+                                                               Style="{StaticResource ValueText}"/>
+                                                </Grid>
+                                                <Slider x:Name="SldGreen" Style="{StaticResource ModernSlider}" Margin="0,10,0,0"
+                                                        Minimum="10" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True"
+                                                        ValueChanged="Sld_ValueChanged"/>
+                                                <TextBlock Text="100% 为经典豆沙绿(白色背景呈现柔和的暖绿色),调低则更接近原色。"
+                                                           Style="{StaticResource Hint}" Margin="0,10,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="2">
+                                        <Border Style="{StaticResource CardBox}" Margin="0,0,0,14">
+                                            <StackPanel>
+                                                <Grid>
+                                                    <TextBlock Text="屏幕亮度" Style="{StaticResource CardTitle}"/>
+                                                    <TextBlock x:Name="TxtBrightValue" Text="100 %" HorizontalAlignment="Right"
+                                                               Style="{StaticResource ValueText}"/>
+                                                </Grid>
+                                                <Slider x:Name="SldBright" Style="{StaticResource ModernSlider}" Margin="0,10,0,0"
+                                                        Minimum="10" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True"
+                                                        ValueChanged="Sld_ValueChanged"/>
+                                                <TextBlock Text="范围 10%–100%。低于 50% 时自动启用遮罩加深,实现更深的调暗。"
+                                                           Style="{StaticResource Hint}" Margin="0,10,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Style="{StaticResource CardBox}">
+                                            <StackPanel>
+                                                <TextBlock Text="场景模式" Style="{StaticResource CardTitle}"/>
+                                                <StackPanel Margin="0,11,0,0">
+                                                    <RadioButton Style="{StaticResource SceneRow}" Checked="Scene_Click" Tag="5800,100">
+                                                        <Grid>
+                                                            <TextBlock Text="🎮 游戏"/>
+                                                            <TextBlock Text="5800K · 100%" FontSize="11.5" Opacity="0.75"
+                                                                       HorizontalAlignment="Right" Foreground="#FF8E93A3"/>
+                                                        </Grid>
+                                                    </RadioButton>
+                                                    <RadioButton Style="{StaticResource SceneRow}" Checked="Scene_Click" Tag="4200,80">
+                                                        <Grid>
+                                                            <TextBlock Text="🎬 影院"/>
+                                                            <TextBlock Text="4200K · 80%" FontSize="11.5" Opacity="0.75"
+                                                                       HorizontalAlignment="Right" Foreground="#FF8E93A3"/>
+                                                        </Grid>
+                                                    </RadioButton>
+                                                    <RadioButton Style="{StaticResource SceneRow}" Checked="Scene_Click" Tag="4000,90">
+                                                        <Grid>
+                                                            <TextBlock Text="📖 阅读"/>
+                                                            <TextBlock Text="4000K · 90%" FontSize="11.5" Opacity="0.75"
+                                                                       HorizontalAlignment="Right" Foreground="#FF8E93A3"/>
+                                                        </Grid>
+                                                    </RadioButton>
+                                                    <RadioButton Style="{StaticResource SceneRow}" Checked="Scene_Click" Tag="3400,70"
+                                                                  Margin="0">
+                                                        <Grid>
+                                                            <TextBlock Text="🌙 加班"/>
+                                                            <TextBlock Text="3400K · 70%" FontSize="11.5" Opacity="0.75"
+                                                                       HorizontalAlignment="Right" Foreground="#FF8E93A3"/>
+                                                        </Grid>
+                                                    </RadioButton>
+                                                </StackPanel>
+                                                <TextBlock Text="一键套用色温 + 亮度的组合。" Style="{StaticResource Hint}"
+                                                           Margin="0,1,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- ═══════════ 休息提醒 ═══════════ -->
+                            <StackPanel x:Name="BreakPanel" Visibility="Collapsed">
+                                <!-- Hero:倒计时 + 主操作提到最上层 -->
+                                <Border Style="{StaticResource HeroCard}" Margin="0,0,0,14">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <CheckBox x:Name="ChkBreak" Style="{StaticResource Switch}" Content="启用休息提醒"
+                                                      Checked="ChkBreak_Changed" Unchecked="ChkBreak_Changed"/>
+                                            <TextBlock Text="遵循 20-20-20 护眼法则:每 20 分钟,远眺 20 英尺(约 6 米)外的物体 20 秒。"
+                                                       Style="{StaticResource Hint}" Margin="0,10,0,0"/>
+                                            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                                <TextBlock x:Name="TxtNextBreak" Text="--:--" Style="{StaticResource StatValue}"/>
+                                                <TextBlock x:Name="TxtBreakState" Text="距下次休息" Style="{StaticResource StatUnit}"
+                                                           Margin="9,0,0,5"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                        <Button x:Name="BtnBreakNow" Grid.Column="1" Content="立即休息一次"
+                                                Style="{StaticResource BtnAccent}" Width="150" Height="44"
+                                                Padding="0" VerticalAlignment="Center" Click="BreakNow_Click"/>
+                                    </Grid>
+                                </Border>
+
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="14"/>
+                                        <ColumnDefinition Width="296"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Grid.Column="0" Style="{StaticResource CardBox}" VerticalAlignment="Top">
+                                        <StackPanel>
+                                            <TextBlock Text="提醒节奏" Style="{StaticResource CardTitle}"/>
+                                            <Grid Margin="0,14,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0">
+                                                    <TextBlock Text="每隔多少分钟提醒" Style="{StaticResource FieldLabel}"/>
+                                                    <TextBox x:Name="BoxInterval" Style="{StaticResource DarkBox}" Width="92"
+                                                             HorizontalAlignment="Left" Margin="0,8,0,0"
+                                                             LostFocus="Num_LostFocus" KeyDown="Num_KeyDown"/>
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1">
+                                                    <TextBlock Text="休息时长(秒)" Style="{StaticResource FieldLabel}"/>
+                                                    <TextBox x:Name="BoxDuration" Style="{StaticResource DarkBox}" Width="92"
+                                                             HorizontalAlignment="Left" Margin="0,8,0,0"
+                                                             LostFocus="Num_LostFocus" KeyDown="Num_KeyDown"/>
+                                                </StackPanel>
+                                            </Grid>
+                                            <TextBlock Text="间隔按「活跃时间」累计:只有你在用电脑时才计时,离开会被智能暂停。"
+                                                       Style="{StaticResource Hint}" Margin="0,14,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <Border Grid.Column="2" Style="{StaticResource CardBox}" VerticalAlignment="Top">
+                                        <StackPanel>
+                                            <TextBlock Text="休息方式" Style="{StaticResource CardTitle}"/>
+                                            <CheckBox x:Name="ChkForce" Style="{StaticResource Switch}" Margin="0,16,0,0"
+                                                      Content="强制休息(全屏倒计时)" Checked="ChkForce_Changed" Unchecked="ChkForce_Changed"/>
+                                            <TextBlock Text="全屏遮罩挡住屏幕,倒计时结束前无法继续操作。" Style="{StaticResource Hint}"
+                                                       Margin="0,8,0,16"/>
+                                            <CheckBox x:Name="ChkAllowSkip" Style="{StaticResource Switch}"
+                                                      Content="允许跳过休息" Checked="ChkAllowSkip_Changed" Unchecked="ChkAllowSkip_Changed"/>
+                                            <TextBlock Text="强制模式下满 3 秒后可跳。" Style="{StaticResource Hint}" Margin="0,8,0,16"/>
+                                            <CheckBox x:Name="ChkSmartPause" Style="{StaticResource Switch}"
+                                                      Content="智能暂停" Checked="ChkSmartPause_Changed" Unchecked="ChkSmartPause_Changed"/>
+                                            <TextBlock Text="检测到你离开键盘鼠标时暂停计时。" Style="{StaticResource Hint}" Margin="0,8,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- ═══════════ 通用 ═══════════ -->
+                            <StackPanel x:Name="GeneralPanel" Visibility="Collapsed">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="14"/>
+                                        <ColumnDefinition Width="296"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <StackPanel Grid.Column="0">
+                                        <Border Style="{StaticResource CardBox}" Margin="0,0,0,14">
+                                            <StackPanel>
+                                                <CheckBox x:Name="ChkAutoStart" Style="{StaticResource Switch}"
+                                                          Content="开机自动启动(当前用户)" Checked="ChkAutoStart_Changed" Unchecked="ChkAutoStart_Changed"/>
+                                                <TextBlock x:Name="TxtAutoStartHint" Style="{StaticResource Hint}" Margin="0,10,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Style="{StaticResource CardBox}" Margin="0,0,0,14">
+                                            <StackPanel>
+                                                <CheckBox x:Name="ChkSchedule" Style="{StaticResource Switch}"
+                                                          Content="定时护眼模式" Checked="ChkSchedule_Changed" Unchecked="ChkSchedule_Changed"/>
+                                                <TextBlock Text="在指定时间段自动切换到夜间色温(支持跨零点),其余时间使用手动设定。"
+                                                           Style="{StaticResource Hint}" Margin="0,10,0,14"/>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0">
+                                                        <TextBlock Text="开始" Style="{StaticResource FieldLabel}"/>
+                                                        <TextBox x:Name="BoxSchedStart" Style="{StaticResource DarkBox}" Width="78"
+                                                                 HorizontalAlignment="Left" Margin="0,8,0,0"
+                                                                 LostFocus="Schedule_LostFocus" KeyDown="Num_KeyDown"/>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="1">
+                                                        <TextBlock Text="结束" Style="{StaticResource FieldLabel}"/>
+                                                        <TextBox x:Name="BoxSchedEnd" Style="{StaticResource DarkBox}" Width="78"
+                                                                 HorizontalAlignment="Left" Margin="0,8,0,0"
+                                                                 LostFocus="Schedule_LostFocus" KeyDown="Num_KeyDown"/>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="2">
+                                                        <TextBlock Text="夜间色温" Style="{StaticResource FieldLabel}"/>
+                                                        <TextBox x:Name="BoxSchedTemp" Style="{StaticResource DarkBox}" Width="78"
+                                                                 HorizontalAlignment="Left" Margin="0,8,0,0"
+                                                                 LostFocus="Schedule_LostFocus" KeyDown="Num_KeyDown"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Style="{StaticResource CardBox}">
+                                            <StackPanel>
+                                                <TextBlock Text="窗口行为" Style="{StaticResource CardTitle}"/>
+                                                <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0"
+                                                           Text="关闭窗口(或按 Alt+F4)只是把界面收进系统托盘,护眼滤光与休息提醒继续生效;&#x0a;再次打开:单击托盘图标、双击托盘图标,或直接再运行一次 EyeCare.exe。彻底退出请用托盘右键菜单 →「退出」。"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="2">
+                                        <Border Style="{StaticResource CardBox}" Margin="0,0,0,14">
+                                            <StackPanel>
+                                                <TextBlock Text="全局快捷键" Style="{StaticResource CardTitle}"/>
+                                                <Grid Margin="0,14,0,0">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto"/>
+                                                        <RowDefinition Height="Auto"/>
+                                                    </Grid.RowDefinitions>
+                                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="切换滤光" Style="{StaticResource FieldLabel}"
+                                                               VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                                    <TextBox x:Name="BoxHotkeyToggle" Grid.Row="0" Grid.Column="1" Style="{StaticResource DarkBox}"
+                                                             Width="118" HorizontalAlignment="Left"
+                                                             LostFocus="Hotkey_LostFocus" KeyDown="Num_KeyDown"/>
+                                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="立即休息" Style="{StaticResource FieldLabel}"
+                                                               VerticalAlignment="Center" Margin="0,10,12,0"/>
+                                                    <TextBox x:Name="BoxHotkeyBreak" Grid.Row="1" Grid.Column="1" Style="{StaticResource DarkBox}"
+                                                             Width="118" HorizontalAlignment="Left" Margin="0,10,0,0"
+                                                             LostFocus="Hotkey_LostFocus" KeyDown="Num_KeyDown"/>
+                                                </Grid>
+                                                <TextBlock Text="格式:Ctrl+Alt+E、Ctrl+Shift+F2 等(修饰键 + 字母/数字/F1~F12),失焦后自动应用。"
+                                                           Style="{StaticResource Hint}" Margin="0,12,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Style="{StaticResource CardBox}">
+                                            <StackPanel>
+                                                <TextBlock Text="关于" Style="{StaticResource CardTitle}"/>
+                                                <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0"
+                                                           Text="暮瞳 DuskEye v1.7.0 · 自用免费 · 完全本地运行,无任何联网、无任何账户。&#x0a;配置与日志保存在 %APPDATA%\EyeCare。代码完全属于你,可自由修改与分发。"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- ═══════════ 外观 ═══════════ -->
+                            <StackPanel x:Name="LookPanel" Visibility="Collapsed">
+                                <!-- Hero:背景来源三选 + 当前摘要 -->
+                                <Border Style="{StaticResource HeroCard}" Margin="0,0,0,14">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <TextBlock Text="背景来源" Style="{StaticResource FieldLabel}"/>
+                                            <WrapPanel Margin="0,9,0,0">
+                                                <RadioButton x:Name="BgDesktopMode" Style="{StaticResource PresetChip}"
+                                                             Content="🖥 跟随桌面壁纸" Tag="desktop" Checked="BgMode_Checked"/>
+                                                <RadioButton x:Name="BgImageMode" Style="{StaticResource PresetChip}"
+                                                             Content="🖼 自定义图片" Tag="image" Checked="BgMode_Checked"/>
+                                                <RadioButton x:Name="BgMatte" Style="{StaticResource PresetChip}"
+                                                             Content="🌑 内置渐变" Tag="matte" Checked="BgMode_Checked"/>
+                                            </WrapPanel>
+                                            <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                                                <Ellipse x:Name="DotBg" Width="7" Height="7" VerticalAlignment="Center"
+                                                         Fill="{StaticResource Accent}"/>
+                                                <TextBlock x:Name="TxtBgSummary" Text="正在读取背景…"
+                                                           Margin="8,0,0,0" FontSize="15" FontWeight="SemiBold"
+                                                           VerticalAlignment="Center" Foreground="{StaticResource Text}"/>
+                                            </StackPanel>
+                                            <TextBlock Text="只影响这个设置窗口自身,不影响屏幕滤光与休息提醒。"
+                                                       Style="{StaticResource Hint}" Margin="0,10,0,0"/>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="18,0,0,0">
+                                            <Button x:Name="BtnPickBg" Content="选择图片…" Style="{StaticResource Btn}"
+                                                    Width="120" Height="38" Padding="0" Click="PickBackground_Click"/>
+                                            <Button x:Name="BtnClearBg" Content="清除图片" Style="{StaticResource Btn}"
+                                                    Width="120" Height="32" Padding="0" Margin="0,8,0,0"
+                                                    Click="ClearBackground_Click"/>
                                         </StackPanel>
                                     </Grid>
-                                </StackPanel>
-                            </Border>
+                                </Border>
 
-                            <Border Style="{StaticResource CardBox}" Margin="0,0,0,14">
-                                <StackPanel>
-                                    <CheckBox x:Name="ChkForce" Style="{StaticResource Switch}" Margin="0,0,0,16"
-                                              Content="强制休息(全屏倒计时)" Checked="ChkForce_Changed" Unchecked="ChkForce_Changed"/>
-                                    <CheckBox x:Name="ChkAllowSkip" Style="{StaticResource Switch}" Margin="0,0,0,16"
-                                              Content="允许跳过休息(强制模式下满 3 秒后可跳)" Checked="ChkAllowSkip_Changed" Unchecked="ChkAllowSkip_Changed"/>
-                                    <CheckBox x:Name="ChkSmartPause" Style="{StaticResource Switch}"
-                                              Content="智能暂停(检测到你离开时暂停计时)" Checked="ChkSmartPause_Changed" Unchecked="ChkSmartPause_Changed"/>
-                                </StackPanel>
-                            </Border>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="14"/>
+                                        <ColumnDefinition Width="296"/>
+                                    </Grid.ColumnDefinitions>
 
-                            <Border Style="{StaticResource CardBox}">
-                                <StackPanel>
-                                    <Button x:Name="BtnBreakNow" Content="立即休息一次" Style="{StaticResource BtnAccent}"
-                                            Width="160" HorizontalAlignment="Left" Click="BreakNow_Click"/>
-                                    <TextBlock x:Name="TxtNextBreak" Text="距下次休息 --:--"
-                                               Style="{StaticResource Hint}" Margin="0,12,0,0"/>
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
+                                    <StackPanel Grid.Column="0">
+                                        <Border Style="{StaticResource CardBox}" Margin="0,0,0,14">
+                                            <StackPanel>
+                                                <TextBlock Text="当前背景" Style="{StaticResource CardTitle}"/>
+                                                <TextBlock x:Name="TxtBgFile" Text="未选择" Style="{StaticResource Hint}"
+                                                           Margin="0,10,0,0"/>
+                                                <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0"
+                                                           Text="跟随桌面壁纸 = 现读你的壁纸,不占额外空间,换壁纸重开本窗口即更新。&#x0a;自定义图片则会复制一份到配置目录(EyeCare 的 backgrounds 子目录),之后把原文件删掉或挪走都不受影响。"/>
+                                            </StackPanel>
+                                        </Border>
 
-                        <!-- ═══ 通用 ═══ -->
-                        <StackPanel x:Name="GeneralPanel" Visibility="Collapsed">
-                            <Border Style="{StaticResource CardBox}" Margin="0,0,0,14">
-                                <StackPanel>
-                                    <CheckBox x:Name="ChkAutoStart" Style="{StaticResource Switch}"
-                                              Content="开机自动启动(当前用户)" Checked="ChkAutoStart_Changed" Unchecked="ChkAutoStart_Changed"/>
-                                    <TextBlock x:Name="TxtAutoStartHint" Style="{StaticResource Hint}" Margin="0,10,0,0"/>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Style="{StaticResource CardBox}" Margin="0,0,0,14">
-                                <StackPanel>
-                                    <CheckBox x:Name="ChkSchedule" Style="{StaticResource Switch}" Margin="0,0,0,14"
-                                              Content="定时护眼模式" Checked="ChkSchedule_Changed" Unchecked="ChkSchedule_Changed"/>
-                                    <TextBlock Text="在指定时间段自动切换到夜间色温(支持跨零点),其余时间使用上方手动设定。"
-                                               Style="{StaticResource Hint}" Margin="0,0,0,14"/>
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="开始" Style="{StaticResource CardTitle}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                        <TextBox x:Name="BoxSchedStart" Style="{StaticResource DarkBox}" Width="80"
-                                                 LostFocus="Schedule_LostFocus" KeyDown="Num_KeyDown"/>
-                                        <TextBlock Text="结束" Style="{StaticResource CardTitle}" VerticalAlignment="Center"
-                                                   Margin="20,0,8,0"/>
-                                        <TextBox x:Name="BoxSchedEnd" Style="{StaticResource DarkBox}" Width="80"
-                                                 LostFocus="Schedule_LostFocus" KeyDown="Num_KeyDown"/>
-                                        <TextBlock Text="夜间色温" Style="{StaticResource CardTitle}" VerticalAlignment="Center"
-                                                   Margin="20,0,8,0"/>
-                                        <TextBox x:Name="BoxSchedTemp" Style="{StaticResource DarkBox}" Width="80"
-                                                 LostFocus="Schedule_LostFocus" KeyDown="Num_KeyDown"/>
+                                        <Border Style="{StaticResource CardBox}">
+                                            <StackPanel>
+                                                <TextBlock Text="护眼提示" Style="{StaticResource CardTitle}"/>
+                                                <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0"
+                                                           Text="背景越亮越花,眼睛越累 —— 壁纸建议挑低对比的,并把遮罩浓度调高。&#x0a;觉得分心就直接回到「内置渐变」,那是最省眼睛的一档。"/>
+                                            </StackPanel>
+                                        </Border>
                                     </StackPanel>
-                                </StackPanel>
-                            </Border>
 
-                            <Border Style="{StaticResource CardBox}" Margin="0,0,0,14">
-                                <StackPanel>
-                                    <TextBlock Text="全局快捷键" Style="{StaticResource CardTitle}"/>
-                                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                                        <TextBlock Text="切换滤光" Style="{StaticResource CardTitle}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                        <TextBox x:Name="BoxHotkeyToggle" Style="{StaticResource DarkBox}" Width="130"
-                                                 LostFocus="Hotkey_LostFocus" KeyDown="Num_KeyDown"/>
-                                        <TextBlock Text="立即休息" Style="{StaticResource CardTitle}" VerticalAlignment="Center"
-                                                   Margin="20,0,8,0"/>
-                                        <TextBox x:Name="BoxHotkeyBreak" Style="{StaticResource DarkBox}" Width="130"
-                                                 LostFocus="Hotkey_LostFocus" KeyDown="Num_KeyDown"/>
+                                    <StackPanel Grid.Column="2">
+                                        <Border Style="{StaticResource CardBox}" Margin="0,0,0,14">
+                                            <StackPanel>
+                                                <Grid>
+                                                    <TextBlock Text="背景遮罩浓度" Style="{StaticResource CardTitle}"/>
+                                                    <TextBlock x:Name="TxtDimValue" Text="80 %" HorizontalAlignment="Right"
+                                                               Style="{StaticResource ValueText}"/>
+                                                </Grid>
+                                                <Slider x:Name="SldDim" Style="{StaticResource ModernSlider}" Margin="0,10,0,0"
+                                                        Minimum="10" Maximum="100" TickFrequency="1" IsSnapToTickEnabled="True"
+                                                        ValueChanged="Bg_ValueChanged"/>
+
+                                                <Grid Margin="0,16,0,0">
+                                                    <TextBlock Text="背景模糊" Style="{StaticResource CardTitle}"/>
+                                                    <TextBlock x:Name="TxtBlurValue" Text="18 px" HorizontalAlignment="Right"
+                                                               Style="{StaticResource ValueText}"/>
+                                                </Grid>
+                                                <Slider x:Name="SldBlur" Style="{StaticResource ModernSlider}" Margin="0,10,0,0"
+                                                        Minimum="0" Maximum="40" TickFrequency="1" IsSnapToTickEnabled="True"
+                                                        ValueChanged="Bg_ValueChanged"/>
+
+                                                <TextBlock x:Name="TxtBgHint" Style="{StaticResource Hint}" Margin="0,12,0,0"
+                                                           Text="遮罩越浓,背景越暗越护眼;模糊负责把照片细节抹平,免得抢注意力。"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Button x:Name="BtnResetBg" Content="恢复默认背景" Style="{StaticResource Btn}"
+                                                Width="132" Height="34" HorizontalAlignment="Left" Padding="0"
+                                                Click="ResetBackground_Click"/>
                                     </StackPanel>
-                                    <TextBlock Text="格式:Ctrl+Alt+E、Ctrl+Shift+F2 等(修饰键 + 字母/数字/F1~F12),失焦后自动应用。"
-                                               Style="{StaticResource Hint}" Margin="0,10,0,0"/>
-                                </StackPanel>
-                            </Border>
-
-                            <Border Style="{StaticResource CardBox}">
-                                <StackPanel>
-                                    <TextBlock Text="关于" Style="{StaticResource CardTitle}"/>
-                                    <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0"
-                                               Text="EyeCare 护眼卫士 v1.3.0 · 自用免费 · 完全本地运行,无任何联网、无任何账户。&#x0a;配置与日志保存在 %APPDATA%\EyeCare。代码完全属于你,可自由修改与分发。"/>
-                                </StackPanel>
-                            </Border>
-                        </StackPanel>
-                    </Grid>
-                </ScrollViewer>
+                                </Grid>
+                            </StackPanel>
+                        </Grid>
+                    </ScrollViewer>
+                </Grid>
             </Grid>
         </Grid>
     </Border>

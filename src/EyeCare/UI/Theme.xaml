@@ -23,6 +23,16 @@
         <GradientStop Color="#FFFFB84D" Offset="0.55"/>
         <GradientStop Color="#FFFF8A3E" Offset="1"/>
     </LinearGradientBrush>
+    <!-- 品牌花押:暮色底 + 字形渐变(与应用图标同源) -->
+    <LinearGradientBrush x:Key="BrandTileBg" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#FF171225" Offset="0"/>
+        <GradientStop Color="#FF0B0C10" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="BrandGlyph" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#FFFFF3D9" Offset="0"/>
+        <GradientStop Color="#FFFFC46A" Offset="0.45"/>
+        <GradientStop Color="#FFFF8A3D" Offset="1"/>
+    </LinearGradientBrush>
     <LinearGradientBrush x:Key="WindowBackground" StartPoint="0,0" EndPoint="1,1">
         <GradientStop Color="#FF141726" Offset="0"/>
         <GradientStop Color="#FF0E0F16" Offset="0.45"/>
@@ -41,19 +51,140 @@
         <GradientStop Color="#00FFB84D" Offset="1"/>
     </RadialGradientBrush>
 
-    <!-- ═══════════ 卡片容器 ═══════════ -->
+    <!-- ═══════════ 背景 / 玻璃:三层结构 ═══════════
+         这一版把「晃眼睛」当成头号要修的问题 —— 护眼软件本身不该是一个高光闪闪的界面。
+         原则:**背景可换,亮部收敛**。
+         ① 背景层 = 由 AppSettings.BackgroundMode 决定(内置哑光渐变 / 自定义图片 / 跟随桌面),
+            换的只是 SettingsWindow 里 BgLayer 的 Background 画刷;
+         ② 遮罩层 = 下面 ScrimGlass,整层 Opacity 由「背景遮罩浓度」滑杆控制,
+            把照片或桌面压暗到不刺眼;
+         ③ 面板层 = GlassCardFill / GlassCardEdge 等,哑光深色卡片,只留一丝顶边高光。
+         注意这里的高光 alpha 都刻意压得很低(顶点 11% 白),
+         想「更有玻璃感」时不要直接把这几个值调亮 —— 长时间注视会刺眼,这正是本次要解决的问题。 -->
+
+    <!-- ② 遮罩:斜向渐变。整层再乘一个 Opacity,所以这里按「满浓度」写 -->
+    <LinearGradientBrush x:Key="ScrimGlass" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#F20F1119" Offset="0"/>
+        <GradientStop Color="#EB0C0E16" Offset="0.5"/>
+        <GradientStop Color="#E00A0B12" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- 极光:两团极淡柔光给纯色背景一点纵深(暖琥珀 / 冷靛),亮度只有上一版的一半 -->
+    <RadialGradientBrush x:Key="AuroraWarm" Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+        <GradientStop Color="#1FFFB84D" Offset="0"/>
+        <GradientStop Color="#0AFF9A3E" Offset="0.45"/>
+        <GradientStop Color="#00FF8A3E" Offset="1"/>
+    </RadialGradientBrush>
+    <RadialGradientBrush x:Key="AuroraCool" Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+        <GradientStop Color="#175B7CFF" Offset="0"/>
+        <GradientStop Color="#0A405AD8" Offset="0.5"/>
+        <GradientStop Color="#00405AD8" Offset="1"/>
+    </RadialGradientBrush>
+
+    <!-- ③ 面板:哑光深色玻璃 —— 暗而不亮。上浅下深保留一点体积感,但整体是「压下去」的 -->
+    <LinearGradientBrush x:Key="GlassCardFill" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#B31B2030" Offset="0"/>
+        <GradientStop Color="#A6151A27" Offset="0.55"/>
+        <GradientStop Color="#99101522" Offset="1"/>
+    </LinearGradientBrush>
+    <!-- 顶边高光只留一丝(11% → 6% → 3%),用来交代"这是一张卡",不再有白光边 -->
+    <LinearGradientBrush x:Key="GlassCardEdge" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#1CFFFFFF" Offset="0"/>
+        <GradientStop Color="#10FFFFFF" Offset="0.35"/>
+        <GradientStop Color="#08FFFFFF" Offset="1"/>
+    </LinearGradientBrush>
+    <!-- Hero 卡:琥珀味收敛到一层薄雾,主体仍是哑光深色 -->
+    <LinearGradientBrush x:Key="GlassHeroFill" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#24FFB84D" Offset="0"/>
+        <GradientStop Color="#B0171A28" Offset="0.42"/>
+        <GradientStop Color="#99101521" Offset="1"/>
+    </LinearGradientBrush>
+    <!-- 侧栏:比内容区更沉一档,也要够实,免得自定义背景一亮就读不清导航 -->
+    <LinearGradientBrush x:Key="GlassRailFill" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#B80A0B12" Offset="0"/>
+        <GradientStop Color="#9E090A10" Offset="1"/>
+    </LinearGradientBrush>
+    <!-- 顶栏/工具栏玻璃 -->
+    <SolidColorBrush x:Key="GlassBarFill" Color="#1AFFFFFF"/>
+    <!-- 交互件在玻璃上的通用底色(比上一版再收一档,避免一片灰白) -->
+    <SolidColorBrush x:Key="GlassChip" Color="#17FFFFFF"/>
+    <SolidColorBrush x:Key="GlassChipHover" Color="#29FFFFFF"/>
+    <SolidColorBrush x:Key="GlassSunken" Color="#4D000000"/>
+    <SolidColorBrush x:Key="GlassHairline" Color="#17FFFFFF"/>
+
+    <!-- ═══════════ 卡片容器(玻璃) ═══════════ -->
+    <!-- 半透明填充 + 顶部亮边:光从上方来,所以上缘最亮、下缘几乎看不见 -->
     <Style x:Key="CardBox" TargetType="Border">
-        <Setter Property="Background" Value="{StaticResource CardGradient}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+        <Setter Property="Background" Value="{StaticResource GlassCardFill}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource GlassCardEdge}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="CornerRadius" Value="16"/>
-        <Setter Property="Padding" Value="20,18"/>
+        <Setter Property="Padding" Value="18,16"/>
+    </Style>
+
+    <!-- 紧凑卡:用于两栏栅格里的次级信息 -->
+    <Style x:Key="CardBoxTight" TargetType="Border" BasedOn="{StaticResource CardBox}">
+        <Setter Property="Padding" Value="18,16"/>
+        <Setter Property="CornerRadius" Value="14"/>
+    </Style>
+
+    <!-- Hero 卡:承载「当前状态」。琥珀柔光从 26/0.16 收到 18/0.07 ——
+         这层光晕是上一版最"晃眼睛"的元凶之一(卡片周围一圈发亮的橙雾) -->
+    <Style x:Key="HeroCard" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource GlassHeroFill}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource GlassCardEdge}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="18"/>
+        <Setter Property="Padding" Value="22,20"/>
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect Color="#FFFF9A3E" BlurRadius="18" ShadowDepth="0" Opacity="0.07"/>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <Style x:Key="CardTitle" TargetType="TextBlock">
         <Setter Property="Foreground" Value="{StaticResource Text}"/>
-        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="FontSize" Value="13.5"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+
+    <!-- 小标签(卡片内的次级说明,如「色温」「间隔」) -->
+    <Style x:Key="FieldLabel" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource SubText}"/>
+        <Setter Property="FontSize" Value="12"/>
+    </Style>
+
+    <!-- Hero 里的大数字 -->
+    <Style x:Key="StatValue" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource Text}"/>
+        <Setter Property="FontSize" Value="26"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+    </Style>
+    <Style x:Key="StatUnit" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource SubText}"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Margin" Value="4,0,0,3"/>
+    </Style>
+    <Style x:Key="StatLabel" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{StaticResource SubText}"/>
+        <Setter Property="FontSize" Value="11.5"/>
+    </Style>
+
+    <!-- 分隔线:玻璃上的一条极淡细线 -->
+    <Style x:Key="GlassDivider" TargetType="Border">
+        <Setter Property="Height" Value="1"/>
+        <Setter Property="Background" Value="#14FFFFFF"/>
+        <Setter Property="Margin" Value="0,14"/>
+    </Style>
+
+    <!-- 状态胶囊(侧栏底部显示当前色调/开关) -->
+    <Style x:Key="StatusPill" TargetType="Border">
+        <Setter Property="Background" Value="#17FFFFFF"/>
+        <Setter Property="BorderBrush" Value="#1AFFFFFF"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="10"/>
+        <Setter Property="Padding" Value="10,7"/>
     </Style>
 
     <Style x:Key="Hint" TargetType="TextBlock">
@@ -94,7 +225,7 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="#FF252A38"/>
+                            <Setter TargetName="Bd" Property="Background" Value="#33FFFFFF"/>
                             <Setter Property="Foreground" Value="{StaticResource Text}"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -121,20 +252,21 @@
         </Setter>
     </Style>
 
-    <!-- ═══════════ 左侧导航(RadioButton 竖排) ═══════════ -->
+    <!-- ═══════════ 左侧导航(RadioButton 竖排,玻璃态) ═══════════ -->
     <Style x:Key="NavItem" TargetType="RadioButton">
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="Margin" Value="10,2"/>
+        <Setter Property="Margin" Value="10,3"/>
         <Setter Property="Foreground" Value="{StaticResource SubText}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
                     <Grid Height="44">
-                        <Border x:Name="Bd" CornerRadius="11" Background="Transparent"/>
-                        <Rectangle x:Name="Indicator" Width="3.5" Height="20" RadiusX="2" RadiusY="2"
+                        <Border x:Name="Bd" CornerRadius="12" Background="Transparent"
+                                BorderBrush="Transparent" BorderThickness="1"/>
+                        <Rectangle x:Name="Indicator" Width="3" Height="18" RadiusX="1.5" RadiusY="1.5"
                                    Fill="{StaticResource AccentGradient}" HorizontalAlignment="Left"
-                                   Margin="0,12,0,0" Opacity="0"/>
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0">
+                                   Margin="-1,0,0,0" Opacity="0"/>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="17,0,0,0">
                             <TextBlock x:Name="Icon" Text="{TemplateBinding Tag}" FontFamily="Segoe MDL2 Assets"
                                        FontSize="15" VerticalAlignment="Center" Foreground="{StaticResource SubText}"/>
                             <TextBlock x:Name="Label" Text="{TemplateBinding Content}" FontSize="13.5" FontWeight="SemiBold"
@@ -143,10 +275,11 @@
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="#FF171A24"/>
+                            <Setter TargetName="Bd" Property="Background" Value="#14FFFFFF"/>
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="{StaticResource NavActiveGradient}"/>
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="#2AFFB84D"/>
                             <Setter TargetName="Indicator" Property="Opacity" Value="1"/>
                             <Setter TargetName="Icon" Property="Foreground" Value="{StaticResource Accent}"/>
                             <Setter TargetName="Label" Property="Foreground" Value="{StaticResource Text}"/>
@@ -157,11 +290,11 @@
         </Setter>
     </Style>
 
-    <!-- ═══════════ 按钮 ═══════════ -->
+    <!-- ═══════════ 按钮(玻璃态) ═══════════ -->
     <Style x:Key="Btn" TargetType="Button">
-        <Setter Property="Background" Value="{StaticResource Card}"/>
+        <Setter Property="Background" Value="{StaticResource GlassChip}"/>
         <Setter Property="Foreground" Value="{StaticResource Text}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource LineBright}"/>
+        <Setter Property="BorderBrush" Value="#1FFFFFFF"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="FontSize" Value="13"/>
         <Setter Property="Cursor" Value="Hand"/>
@@ -177,11 +310,11 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource CardHover}"/>
-                            <Setter TargetName="Bd" Property="BorderBrush" Value="#FF4A5268"/>
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource GlassChipHover}"/>
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="#2EFFFFFF"/>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource CardPressed}"/>
+                            <Setter TargetName="Bd" Property="Background" Value="#0DFFFFFF"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.45"/>
@@ -203,7 +336,7 @@
                     <Border x:Name="Bd" CornerRadius="10" Background="{TemplateBinding Background}"
                             Padding="{TemplateBinding Padding}">
                         <Border.Effect>
-                            <DropShadowEffect Color="#FFFF9A3E" BlurRadius="16" ShadowDepth="0" Opacity="0.35"/>
+                            <DropShadowEffect Color="#FFFF9A3E" BlurRadius="16" ShadowDepth="0" Opacity="0.22"/>
                         </Border.Effect>
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
@@ -234,8 +367,9 @@
                 <ControlTemplate TargetType="CheckBox">
                     <StackPanel Orientation="Horizontal" Background="Transparent">
                         <Grid Width="46" Height="26">
-                            <Border x:Name="Track" CornerRadius="13" Background="#FF2A2E3A"/>
-                            <Ellipse x:Name="Knob" Width="20" Height="20" Fill="#FFA9AEBB"
+                            <Border x:Name="Track" CornerRadius="13" Background="#26FFFFFF"
+                                    BorderBrush="#1FFFFFFF" BorderThickness="1"/>
+                            <Ellipse x:Name="Knob" Width="20" Height="20" Fill="#E6FFFFFF"
                                      HorizontalAlignment="Left" VerticalAlignment="Center" Margin="3,0,0,0">
                                 <Ellipse.Effect>
                                     <DropShadowEffect Color="Black" BlurRadius="6" ShadowDepth="1" Opacity="0.4"/>
@@ -267,7 +401,7 @@
                                 <BeginStoryboard>
                                     <Storyboard>
                                         <ColorAnimation Storyboard.TargetName="Track" Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                                        To="#FF2A2E3A" Duration="0:0:0.18"/>
+                                                        To="#26FFFFFF" Duration="0:0:0.18"/>
                                         <DoubleAnimation Storyboard.TargetName="KnobTf" Storyboard.TargetProperty="X"
                                                          To="0" Duration="0:0:0.2">
                                             <DoubleAnimation.EasingFunction>
@@ -288,26 +422,26 @@
         </Setter>
     </Style>
 
-    <!-- ═══════════ 预设胶囊 ═══════════ -->
+    <!-- ═══════════ 预设胶囊(玻璃态) ═══════════ -->
     <Style x:Key="PresetChip" TargetType="RadioButton">
         <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="Margin" Value="0,0,8,8"/>
+        <Setter Property="Margin" Value="0,0,7,5"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
-                    <Border x:Name="Bd" CornerRadius="9" Padding="14,7" Background="#FF12141B"
-                            BorderBrush="{StaticResource Line}" BorderThickness="1">
+                    <Border x:Name="Bd" CornerRadius="9" Padding="11,6" Background="{StaticResource GlassChip}"
+                            BorderBrush="#1AFFFFFF" BorderThickness="1">
                         <ContentPresenter x:Name="Cp" TextElement.Foreground="{StaticResource SubText}"
-                                          TextElement.FontSize="12.5"/>
+                                          TextElement.FontSize="12.2"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource CardHover}"/>
-                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource LineBright}"/>
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource GlassChipHover}"/>
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="#40FFFFFF"/>
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="#FF3A2A12"/>
-                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Accent}"/>
+                            <Setter TargetName="Bd" Property="Background" Value="#30FFB84D"/>
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="#80FFB84D"/>
                             <Setter TargetName="Cp" Property="TextElement.Foreground" Value="{StaticResource Accent}"/>
                             <Setter TargetName="Cp" Property="TextElement.FontWeight" Value="SemiBold"/>
                         </Trigger>
@@ -317,11 +451,42 @@
         </Setter>
     </Style>
 
-    <!-- ═══════════ 输入框 ═══════════ -->
+    <!-- ═══════════ 场景行(窄栏里的预设:左名称右参数,一行一个) ═══════════ -->
+    <Style x:Key="SceneRow" TargetType="RadioButton">
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Margin" Value="0,0,0,7"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="Bd" CornerRadius="9" Padding="12,8" Background="{StaticResource GlassChip}"
+                            BorderBrush="#1AFFFFFF" BorderThickness="1">
+                        <ContentPresenter x:Name="Cp" HorizontalAlignment="Stretch"
+                                          TextElement.Foreground="{StaticResource SubText}"
+                                          TextElement.FontSize="12.2"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{StaticResource GlassChipHover}"/>
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="#40FFFFFF"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#30FFB84D"/>
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="#80FFB84D"/>
+                            <Setter TargetName="Cp" Property="TextElement.Foreground" Value="{StaticResource Accent}"/>
+                            <Setter TargetName="Cp" Property="TextElement.FontWeight" Value="SemiBold"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ═══════════ 输入框(玻璃凹陷) ═══════════ -->
     <Style x:Key="DarkBox" TargetType="TextBox">
-        <Setter Property="Background" Value="#FF0E1016"/>
+        <Setter Property="Background" Value="{StaticResource GlassSunken}"/>
         <Setter Property="Foreground" Value="{StaticResource Text}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+        <Setter Property="BorderBrush" Value="#1FFFFFFF"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding" Value="9,6"/>
         <Setter Property="FontSize" Value="13"/>
@@ -338,7 +503,7 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource LineBright}"/>
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="#40FFFFFF"/>
                         </Trigger>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
                             <Setter TargetName="Bd" Property="BorderBrush" Value="{StaticResource Accent}"/>
@@ -384,7 +549,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Slider">
                     <Grid VerticalAlignment="Center">
-                        <Border Height="6" CornerRadius="3" Background="{StaticResource Track}"/>
+                        <Border Height="6" CornerRadius="3" Background="#26FFFFFF"/>
                         <Track x:Name="PART_Track">
                             <Track.DecreaseRepeatButton>
                                 <RepeatButton Command="Slider.DecreaseLarge" Style="{StaticResource SliderRepeatLeft}"/>
@@ -397,7 +562,7 @@
                                     <Thumb.Template>
                                         <ControlTemplate TargetType="Thumb">
                                             <Grid Background="Transparent">
-                                                <Ellipse Fill="{StaticResource AccentGradient}" Stroke="#FF0B0C10" StrokeThickness="3">
+                                                <Ellipse Fill="{StaticResource AccentGradient}" Stroke="#80FFFFFF" StrokeThickness="2">
                                                     <Ellipse.Effect>
                                                         <DropShadowEffect Color="#FFFFB84D" BlurRadius="12" ShadowDepth="0" Opacity="0.55"/>
                                                     </Ellipse.Effect>
@@ -412,6 +577,197 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <!-- ═══════════ 滚动条:琥珀光轨(科技感) ═══════════ -->
+    <!-- 结构:① 两端淡出的导轨细线 ② 首尾刻度帽 ③ 发光胶囊滑块(暗底 + 琥珀描边 + 贯穿亮芯)
+         交互:悬停 = 发光点亮 + 琥珀充能;拖动 = 熔金态(整条滑块炽亮)。无箭头、无浅色轨道。 -->
+    <LinearGradientBrush x:Key="RailGlowV" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Color="#00FFB84D" Offset="0"/>
+        <GradientStop Color="#6BFFB84D" Offset="0.1"/>
+        <GradientStop Color="#6BFFB84D" Offset="0.9"/>
+        <GradientStop Color="#00FFB84D" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="RailGlowH" StartPoint="0,0" EndPoint="1,0">
+        <GradientStop Color="#00FFB84D" Offset="0"/>
+        <GradientStop Color="#6BFFB84D" Offset="0.1"/>
+        <GradientStop Color="#6BFFB84D" Offset="0.9"/>
+        <GradientStop Color="#00FFB84D" Offset="1"/>
+    </LinearGradientBrush>
+    <!-- 滑块亮芯:中段最亮、两端渐隐(纵向=一根能量棒;横向=居中一枚短光条) -->
+    <LinearGradientBrush x:Key="BeamGlow" StartPoint="0.5,0" EndPoint="0.5,1">
+        <GradientStop Color="#26FFE8BE" Offset="0"/>
+        <GradientStop Color="#FFFFF0CC" Offset="0.5"/>
+        <GradientStop Color="#26FFE8BE" Offset="1"/>
+    </LinearGradientBrush>
+
+    <Style x:Key="ScrollPageBtn" TargetType="RepeatButton">
+        <Setter Property="OverridesDefaultStyle" Value="True"/>
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="IsTabStop" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RepeatButton">
+                    <Border Background="Transparent"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="ScrollThumbStyle" TargetType="Thumb">
+        <Setter Property="OverridesDefaultStyle" Value="True"/>
+        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="IsTabStop" Value="False"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Thumb">
+                    <!-- 命中区铺满整条(含导轨两侧留白),内层视觉才有 2px 内缩,拖动更好抓 -->
+                    <Grid x:Name="Hit" Background="Transparent">
+                        <!-- ① 外发光:悬停点亮 -->
+                        <Border x:Name="Aura" Margin="2,0" CornerRadius="4" Background="#FFFFB84D" Opacity="0.20">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#FFFFB84D" BlurRadius="13" ShadowDepth="0" Opacity="0.95"/>
+                            </Border.Effect>
+                        </Border>
+                        <!-- ② 胶囊本体:曜石底 + 琥珀描边 -->
+                        <Border x:Name="Capsule" Margin="2,0" CornerRadius="4"
+                                Background="#F20D0F16" BorderBrush="#59FFB84D" BorderThickness="1"/>
+                        <!-- ③ 充能层:悬停时琥珀色填充(clip 在胶囊内,靠 CornerRadius 收圆) -->
+                        <Border x:Name="Hot" Margin="2,0" CornerRadius="4" Opacity="0"
+                                Background="#B3FFB84D"/>
+                        <!-- ④ 熔金层:拖动时整条炽亮 -->
+                        <Border x:Name="Molten" Margin="2,0" CornerRadius="4" Opacity="0"
+                                Background="{StaticResource AccentGradient}">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#FFFFB84D" BlurRadius="18" ShadowDepth="0" Opacity="1"/>
+                            </Border.Effect>
+                        </Border>
+                        <!-- ⑤ 亮芯:贯穿滑块的一条琥珀光带(纵向时竖着走,横向时居中成抓手) -->
+                        <Border x:Name="Beam" Width="2" HorizontalAlignment="Center" CornerRadius="1"
+                                Background="{StaticResource BeamGlow}" Opacity="0.75"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Aura" Storyboard.TargetProperty="Opacity" To="0.85" Duration="0:0:0.16"/>
+                                        <DoubleAnimation Storyboard.TargetName="Hot" Storyboard.TargetProperty="Opacity" To="0.34" Duration="0:0:0.16"/>
+                                        <DoubleAnimation Storyboard.TargetName="Beam" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.16"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Aura" Storyboard.TargetProperty="Opacity" To="0.20" Duration="0:0:0.22"/>
+                                        <DoubleAnimation Storyboard.TargetName="Hot" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.22"/>
+                                        <DoubleAnimation Storyboard.TargetName="Beam" Storyboard.TargetProperty="Opacity" To="0.75" Duration="0:0:0.22"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                        <!-- 拖动只碰 Molten,与悬停触发器的属性互不干扰 -->
+                        <Trigger Property="IsDragging" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Molten" Storyboard.TargetProperty="Opacity" To="0.92" Duration="0:0:0.1"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Molten" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.25"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 隐式样式:全局生效(ScrollViewer / TextBox / ListBox 内的滚动条一并统一) -->
+    <Style TargetType="{x:Type ScrollBar}">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Width" Value="12"/>
+        <Setter Property="MinWidth" Value="12"/>
+        <Setter Property="Margin" Value="0,6,2,6"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ScrollBar">
+                    <Grid Background="Transparent">
+                        <!-- 导轨:整条贯穿的琥珀细线,两端淡出;鼠标进入整条滚动条时提亮 -->
+                        <Border x:Name="Rail" Width="1" HorizontalAlignment="Center" CornerRadius="0.5"
+                                Background="{StaticResource RailGlowV}" Opacity="0.52"/>
+                        <!-- 首尾刻度帽 -->
+                        <Border x:Name="CapTop" Width="5" Height="1" CornerRadius="0.5" Opacity="0.6"
+                                HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,1,0,0"
+                                Background="#99FFB84D"/>
+                        <Border x:Name="CapBottom" Width="5" Height="1" CornerRadius="0.5" Opacity="0.6"
+                                HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,1"
+                                Background="#99FFB84D"/>
+                        <Border x:Name="CapLeft" Width="1" Height="5" CornerRadius="0.5" Opacity="0.6"
+                                HorizontalAlignment="Left" VerticalAlignment="Center" Margin="1,0,0,0"
+                                Background="#99FFB84D" Visibility="Collapsed"/>
+                        <Border x:Name="CapRight" Width="1" Height="5" CornerRadius="0.5" Opacity="0.6"
+                                HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,1,0"
+                                Background="#99FFB84D" Visibility="Collapsed"/>
+
+                        <Track x:Name="PART_Track" IsDirectionReversed="True"
+                               Orientation="{TemplateBinding Orientation}">
+                            <Track.DecreaseRepeatButton>
+                                <RepeatButton Command="ScrollBar.PageUpCommand" Style="{StaticResource ScrollPageBtn}"/>
+                            </Track.DecreaseRepeatButton>
+                            <Track.Thumb>
+                                <Thumb x:Name="Thumb" Style="{StaticResource ScrollThumbStyle}"/>
+                            </Track.Thumb>
+                            <Track.IncreaseRepeatButton>
+                                <RepeatButton Command="ScrollBar.PageDownCommand" Style="{StaticResource ScrollPageBtn}"/>
+                            </Track.IncreaseRepeatButton>
+                        </Track>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Rail" Property="Opacity" Value="0.9"/>
+                            <Setter TargetName="CapTop" Property="Opacity" Value="1"/>
+                            <Setter TargetName="CapBottom" Property="Opacity" Value="1"/>
+                        </Trigger>
+                        <Trigger Property="Orientation" Value="Horizontal">
+                            <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False"/>
+                            <!-- 导轨转为横向:横向拉伸 + 1px 高 -->
+                            <Setter TargetName="Rail" Property="Background" Value="{StaticResource RailGlowH}"/>
+                            <Setter TargetName="Rail" Property="Width" Value="Auto"/>
+                            <Setter TargetName="Rail" Property="Height" Value="1"/>
+                            <Setter TargetName="Rail" Property="HorizontalAlignment" Value="Stretch"/>
+                            <Setter TargetName="Rail" Property="VerticalAlignment" Value="Center"/>
+                            <Setter TargetName="Rail" Property="Margin" Value="1,0"/>
+                            <!-- 刻度帽换成左右两端 -->
+                            <Setter TargetName="CapTop" Property="Visibility" Value="Collapsed"/>
+                            <Setter TargetName="CapBottom" Property="Visibility" Value="Collapsed"/>
+                            <Setter TargetName="CapLeft" Property="Visibility" Value="Visible"/>
+                            <Setter TargetName="CapRight" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="Orientation" Value="Horizontal">
+                <Setter Property="Width" Value="Auto"/>
+                <Setter Property="MinWidth" Value="0"/>
+                <Setter Property="Height" Value="12"/>
+                <Setter Property="MinHeight" Value="12"/>
+                <Setter Property="Margin" Value="6,0,6,2"/>
+            </Trigger>
+            <Trigger Property="Orientation" Value="Vertical">
+                <Setter Property="Height" Value="Auto"/>
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
 </ResourceDictionary>

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -20,6 +21,28 @@ public partial class SettingsWindow : Window
     private readonly Action _reRegisterHotkeys;
     private readonly DispatcherTimer _debounce;
     private bool _loading = true;
+    private bool _allowClose;
+
+    private static readonly SolidColorBrush AccentDot = new(Color.FromRgb(0xFF, 0xB8, 0x4D));
+    private static readonly SolidColorBrush IdleDot = new(Color.FromRgb(0x6B, 0x70, 0x80));
+
+    // 背景:缓存的图片画刷(内含已做好的像素级模糊),切换遮罩浓度时不必重算
+    private ImageBrush? _bgBrush;
+    /// <summary>上面这把画刷是按哪个文件算出来的 —— 换图(含换桌面壁纸)时靠它判断要不要重算</summary>
+    private string _bgPath = "";
+    /// <summary>实际生效的背景来源。与设置不一致说明发生了降级(读不到图片 / 读不到桌面壁纸)</summary>
+    private string _effectiveBg = "matte";
+
+    // 开机自启的说明文案:原来把完整注册表路径铺在卡片里会折行折得很难看
+    private const string AutoStartOnHint = "已注册:当前用户登录后自动启动(带 --silent 参数,不弹窗打扰)。";
+    private const string AutoStartOffHint = "未启用。启用后写入注册表 Run 项,登录时静默启动。";
+
+    private const string BgDimHint = "遮罩越浓,背景越暗越护眼;模糊负责把照片细节抹平,免得抢注意力。";
+    private const string BgDesktopHint = "背景就是你当前的桌面壁纸,自动读取并模糊;换过壁纸后重新打开这个窗口就会跟上。";
+    private const string BgMatteHint = "内置渐变本身就很暗,不需要遮罩和模糊。";
+
+    /// <summary>窗口被收进托盘(此时应用仍在后台运行)</summary>
+    public event Action? HiddenToTray;
 
     public SettingsWindow(AppSettings settings, FilterEngine filter, BreakManager breakMgr, Action reRegisterHotkeys)
     {
@@ -38,6 +61,7 @@ public partial class SettingsWindow : Window
         };
 
         LoadValues();
+        UpdateBreakStatus(_break.CountdownText, _break.StateText);   // Hero 首帧就显示真实倒计时
         _loading = false;
 
         Loaded += (_, _) => PlayOpenAnimation();
@@ -73,9 +97,7 @@ public partial class SettingsWindow : Window
         ChkSmartPause.IsChecked = _settings.SmartPause;
 
         ChkAutoStart.IsChecked = _settings.AutoStart;
-        TxtAutoStartHint.Text = _settings.AutoStart
-            ? "已写入注册表 HKCU\\...\\Run,登录后自动启动。"
-            : "未启用。启用后写入 HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run。";
+        TxtAutoStartHint.Text = _settings.AutoStart ? AutoStartOnHint : AutoStartOffHint;
 
         ChkSchedule.IsChecked = _settings.ScheduleEnabled;
         BoxSchedStart.Text = _settings.ScheduleStart;
@@ -84,6 +106,8 @@ public partial class SettingsWindow : Window
 
         BoxHotkeyToggle.Text = _settings.HotkeyToggle;
         BoxHotkeyBreak.Text = _settings.HotkeyBreak;
+
+        LoadBackground();
     }
 
     /// <summary>外部(如托盘快捷切换)修改设置后,重新同步界面</summary>
@@ -100,6 +124,7 @@ public partial class SettingsWindow : Window
     {
         if (_loading) return;
         _settings.FilterEnabled = ChkFilter.IsChecked == true;
+        UpdatePreview();          // 摘要与侧栏状态胶囊要跟着开关变
         PersistAndApply();
     }
 
@@ -211,6 +236,48 @@ public partial class SettingsWindow : Window
         var fg = lum > 0.62 ? Color.FromRgb(0x1D, 0x1E, 0x24) : Colors.White;
         PreviewTitle.Foreground = new SolidColorBrush(fg);
         PreviewSub.Foreground = new SolidColorBrush(Color.FromArgb(0xD9, fg.R, fg.G, fg.B));
+
+        UpdateStatusSummary();
+    }
+
+    /// <summary>Hero 摘要 + 侧栏状态胶囊:不开到对应页也能一眼看到当前档位</summary>
+    private void UpdateStatusSummary()
+    {
+        string mode = _settings.FilterMode switch
+        {
+            "green" => "护眼绿",
+            "darkroom" => "暗房",
+            _ => "暖色色温"
+        };
+
+        string summary, pill;
+        if (!_settings.FilterEnabled)
+        {
+            summary = "已关闭 · 屏幕保持原色";
+            pill = "滤光已关闭";
+        }
+        else if (_settings.FilterMode == "green")
+        {
+            summary = $"护眼绿 · 绿度 {SldGreen.Value:0} % · 亮度 {SldBright.Value:0} %";
+            pill = $"护眼绿 · {SldGreen.Value:0} %";
+        }
+        else if (_settings.FilterMode == "darkroom")
+        {
+            summary = $"暗房 · 亮度 {SldBright.Value:0} %";
+            pill = "暗房";
+        }
+        else
+        {
+            summary = $"{mode} · {SldTemp.Value:0} K · 亮度 {SldBright.Value:0} %";
+            pill = $"{mode} · {SldTemp.Value:0} K";
+        }
+
+        TxtHeroSummary.Text = summary;
+        TxtRailStatus.Text = pill;
+
+        var dot = _settings.FilterEnabled ? AccentDot : IdleDot;
+        DotHero.Fill = dot;
+        DotRailStatus.Fill = dot;
     }
 
     // ── 休息 ──
@@ -220,6 +287,7 @@ public partial class SettingsWindow : Window
         if (_loading) return;
         _settings.BreakEnabled = ChkBreak.IsChecked == true;
         PersistAndApply();
+        _break.Sync();      // 开关一改,休息页 Hero 立刻反映"已关闭 / 距下次休息"
     }
 
     private void ChkForce_Changed(object sender, RoutedEventArgs e)
@@ -253,6 +321,7 @@ public partial class SettingsWindow : Window
             ok = ApplyInt(BoxDuration, 5, 600, v => _settings.BreakDurationSeconds = v);
         if (!ok) return;
         PersistAndApply();
+        if (sender == BoxInterval) _break.Sync();   // 间隔变了,倒计时基数要跟着变
     }
 
     private bool ApplyInt(TextBox box, int min, int max, Action<int> assign)
@@ -277,7 +346,11 @@ public partial class SettingsWindow : Window
 
     private void BreakNow_Click(object sender, RoutedEventArgs e) => _break.TriggerNow();
 
-    public void UpdateBreakStatus(string text) => TxtNextBreak.Text = text;
+    public void UpdateBreakStatus(string countdown, string state)
+    {
+        TxtNextBreak.Text = countdown;
+        TxtBreakState.Text = state;
+    }
 
     // ── 通用 ──
 
@@ -286,9 +359,7 @@ public partial class SettingsWindow : Window
         if (_loading) return;
         _settings.AutoStart = ChkAutoStart.IsChecked == true;
         AutoStartManager.Set(_settings.AutoStart);
-        TxtAutoStartHint.Text = _settings.AutoStart
-            ? "已写入注册表 HKCU\\...\\Run,登录后自动启动。"
-            : "未启用。";
+        TxtAutoStartHint.Text = _settings.AutoStart ? AutoStartOnHint : AutoStartOffHint;
         SettingsStore.Save(_settings);
     }
 
@@ -376,6 +447,228 @@ public partial class SettingsWindow : Window
         _debounce.Start();
     }
 
+    // ── 外观 / 背景 ──
+
+    private void LoadBackground()
+    {
+        // 配置里的图片路径可能已经失效(手工清过目录、换了机器),这里兜一次,
+        // 否则会一直渲染成空白背景,而用户根本想不到是路径问题。
+        // 退回的是当前的默认背景(跟随桌面壁纸),不是内置渐变 —— 默认值已经在 AppSettings 里。
+        if (_settings.BackgroundMode == "image" && !BackgroundStore.IsUsable(_settings.BackgroundImagePath))
+        {
+            _settings.BackgroundImagePath = "";
+            _settings.BackgroundMode = "desktop";
+            SettingsStore.Save(_settings);
+        }
+
+        SldDim.Value = Math.Clamp(_settings.BackgroundDim, 10, 100);
+        SldBlur.Value = Math.Clamp(_settings.BackgroundBlur, 0, 40);
+        TxtDimValue.Text = $"{SldDim.Value:0} %";
+        TxtBlurValue.Text = $"{SldBlur.Value:0} px";
+
+        BgMatte.IsChecked = _settings.BackgroundMode == "matte";
+        BgImageMode.IsChecked = _settings.BackgroundMode == "image";
+        BgDesktopMode.IsChecked = _settings.BackgroundMode == "desktop";
+
+        _bgBrush = null;
+        _bgPath = "";
+        ApplyBackground();
+        UpdateBgSummary();
+    }
+
+    /// <summary>
+    /// 把「外观」页的选择落到窗口背景上。
+    /// <para>
+    /// desktop 与 image 只差「图从哪来」—— 一个是当前桌面壁纸(每次现读),一个是用户选的图片 ——
+    /// 之后完全同路:像素层模糊 → 交给 <c>BgLayer.Background</c>。
+    /// 早期版本这里走的是「窗口透明 + 系统亚克力」,实测无效:分层窗口拿不到 DWM 模糊,
+    /// 透出来的是<b>清晰明亮</b>的真实桌面,反而最晃眼。所以改成自己读壁纸自己模糊,结果完全可控。
+    /// </para>
+    /// 任何一步失败都退回内置渐变:背景读不出来时半透明面板糊在空白上是最糟的状态。
+    /// </summary>
+    private void ApplyBackground(bool rebuildBrush = true)
+    {
+        string? source = _settings.BackgroundMode switch
+        {
+            "image" => _settings.BackgroundImagePath,
+            "desktop" => BackgroundStore.ResolveDesktopWallpaper(),
+            _ => null,
+        };
+
+        if (source is null)
+        {
+            UseMatteBackground();
+        }
+        else
+        {
+            // 缓存要连「图从哪来」一起比:两种图片模式切来切去时,路径不同就得重算
+            if (rebuildBrush || _bgBrush is null || !string.Equals(_bgPath, source, StringComparison.OrdinalIgnoreCase))
+                _bgBrush = BackgroundStore.BuildBrush(source, _settings.BackgroundBlur);
+
+            if (_bgBrush is null) UseMatteBackground();     // 图片 / 壁纸读不出来
+            else
+            {
+                BgLayer.Background = _bgBrush;
+                _bgPath = source;
+                _effectiveBg = _settings.BackgroundMode;
+            }
+        }
+
+        // 内置渐变本身就是暗的,再压一层遮罩只会更糊
+        ScrimLayer.Opacity = _effectiveBg == "matte"
+            ? 0
+            : Math.Clamp(_settings.BackgroundDim, 10, 100) / 100.0;
+    }
+
+    private void UseMatteBackground()
+    {
+        BgLayer.Background = (System.Windows.Media.Brush)FindResource("WindowBackground");
+        _bgBrush = null;
+        _bgPath = "";
+        _effectiveBg = "matte";
+    }
+
+    private void UpdateBgSummary()
+    {
+        bool matte = _effectiveBg == "matte";
+        bool degraded = _effectiveBg != _settings.BackgroundMode;
+
+        string text = _effectiveBg switch
+        {
+            "image" => $"自定义图片 · 遮罩 {SldDim.Value:0}% · 模糊 {SldBlur.Value:0}px",
+            "desktop" => $"跟随桌面壁纸 · 遮罩 {SldDim.Value:0}% · 模糊 {SldBlur.Value:0}px",
+            _ => "内置渐变 · 不跟桌面",
+        };
+        if (degraded)
+            text = _settings.BackgroundMode == "desktop"
+                ? "读不到桌面壁纸 · 已退回内置渐变"
+                : "图片读取失败 · 已退回内置渐变";
+
+        TxtBgSummary.Text = text;
+        DotBg.Fill = degraded ? IdleDot : AccentDot;
+
+        TxtBgFile.Text = _effectiveBg switch
+        {
+            "image" => string.IsNullOrEmpty(_settings.BackgroundImagePath)
+                ? "未选择"
+                : System.IO.Path.GetFileName(_settings.BackgroundImagePath),
+            "desktop" => "桌面壁纸(自动读取,已模糊)",
+            _ => "未选择",
+        };
+
+        // 遮罩对内置渐变无意义;模糊对两种「一张图」的背景都生效
+        SldDim.IsEnabled = !matte;
+        SldBlur.IsEnabled = !matte;
+        BtnClearBg.IsEnabled = !string.IsNullOrEmpty(_settings.BackgroundImagePath);
+
+        TxtBgHint.Text = _effectiveBg switch
+        {
+            "desktop" => BgDesktopHint,
+            "image" => BgDimHint,
+            _ => BgMatteHint,
+        };
+    }
+
+    private void BgMode_Checked(object sender, RoutedEventArgs e)
+    {
+        // 构造期 LoadBackground 设 IsChecked 时会回调进来,此时控件还没全建好
+        if (_loading || TxtBgSummary is null) return;
+
+        if (sender is RadioButton rb && rb.Tag is string mode) _settings.BackgroundMode = mode;
+
+        _bgBrush = null;                       // 换回图片模式时按当前模糊值重算
+        ApplyBackground();
+        UpdateBgSummary();
+        SettingsStore.Save(_settings);
+    }
+
+    private void Bg_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        // XAML 解析到 Slider 的 Minimum 时就会触发一次 ValueChanged,
+        // 那时本卡片里的 TextBlock 还没创建 → 必须和 ValueChanged 的其它处理一样先挡住。
+        if (_loading || TxtDimValue is null || TxtBlurValue is null) return;
+
+        TxtDimValue.Text = $"{SldDim.Value:0} %";
+        TxtBlurValue.Text = $"{SldBlur.Value:0} px";
+
+        _settings.BackgroundDim = (int)SldDim.Value;
+        _settings.BackgroundBlur = (int)SldBlur.Value;
+
+        // 只有模糊变化才需要重算图片画刷;拖遮罩时复用缓存,免得每动一格都重做高斯模糊
+        ApplyBackground(rebuildBrush: sender == SldBlur);
+        UpdateBgSummary();
+        SettingsStore.Save(_settings);
+    }
+
+    private void PickBackground_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "选择背景图片",
+            Filter = "图片|*.jpg;*.jpeg;*.png;*.bmp;*.webp;*.gif|所有文件|*.*",
+            CheckFileExists = true,
+        };
+        if (dlg.ShowDialog(this) != true) return;
+
+        var stored = BackgroundStore.Import(dlg.FileName);
+        if (stored.Length == 0)
+        {
+            System.Windows.MessageBox.Show(this, "这张图片读不出来,换一张试试。", "EyeCare",
+                            MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        _settings.BackgroundImagePath = stored;
+        _settings.BackgroundMode = "image";
+
+        _loading = true;                       // 别让 IsChecked 的回调在这里再应用一次
+        BgImageMode.IsChecked = true;
+        _loading = false;
+
+        _bgBrush = null;
+        ApplyBackground();
+        UpdateBgSummary();
+        SettingsStore.Save(_settings);
+    }
+
+    private void ClearBackground_Click(object sender, RoutedEventArgs e)
+    {
+        BackgroundStore.Clear();
+        _settings.BackgroundImagePath = "";
+        // 清掉自定义图片后回到默认背景(跟随桌面壁纸),而不是"什么都没有"的渐变
+        if (_settings.BackgroundMode == "image") _settings.BackgroundMode = "desktop";
+
+        _loading = true;
+        BgDesktopMode.IsChecked = _settings.BackgroundMode == "desktop";
+        BgMatte.IsChecked = _settings.BackgroundMode == "matte";
+        _loading = false;
+
+        _bgBrush = null;
+        _bgPath = "";
+        ApplyBackground();
+        UpdateBgSummary();
+        SettingsStore.Save(_settings);
+    }
+
+    private void ResetBackground_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.BackgroundMode = "desktop";
+        _settings.BackgroundDim = 80;
+        _settings.BackgroundBlur = 18;
+
+        _loading = true;
+        BgDesktopMode.IsChecked = true;
+        SldDim.Value = 80;
+        SldBlur.Value = 18;
+        _loading = false;
+
+        _bgBrush = null;
+        _bgPath = "";
+        ApplyBackground();
+        UpdateBgSummary();
+        SettingsStore.Save(_settings);
+    }
+
     // ── 窗口 ──
 
     private void Nav_Checked(object sender, RoutedEventArgs e)
@@ -390,6 +683,12 @@ public partial class SettingsWindow : Window
             panel = BreakPanel;
             title = "休息提醒";
             sub = "20-20-20 法则 · 强制休息 · 智能暂停";
+        }
+        else if (sender == NavLook)
+        {
+            panel = LookPanel;
+            title = "外观";
+            sub = "设置窗口的背景来源 · 护眼优先,亮部已收敛";
         }
         else if (sender == NavGeneral)
         {
@@ -406,6 +705,7 @@ public partial class SettingsWindow : Window
 
         FilterPanel.Visibility = panel == FilterPanel ? Visibility.Visible : Visibility.Collapsed;
         BreakPanel.Visibility = panel == BreakPanel ? Visibility.Visible : Visibility.Collapsed;
+        LookPanel.Visibility = panel == LookPanel ? Visibility.Visible : Visibility.Collapsed;
         GeneralPanel.Visibility = panel == GeneralPanel ? Visibility.Visible : Visibility.Collapsed;
 
         PageTitleText.Text = title;
@@ -423,5 +723,53 @@ public partial class SettingsWindow : Window
         if (e.ClickCount == 1) DragMove();
     }
 
-    private void Close_Click(object sender, RoutedEventArgs e) => Close();
+    // ── 关闭 = 收进托盘 ──
+    // 应用是托盘常驻型(ShutdownMode=OnExplicitShutdown),关闭窗口只隐藏、不销毁,
+    // 这样再次打开是瞬时的,还能保留当前页签与滚动位置。
+
+    private void Close_Click(object sender, RoutedEventArgs e) => HideToTray();
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        // Alt+F4 / 系统关闭 同样只是收进托盘
+        if (!_allowClose)
+        {
+            e.Cancel = true;
+            HideToTray();
+        }
+        base.OnClosing(e);
+    }
+
+    /// <summary>真正退出前调用,允许窗口正常关闭(否则托盘「退出」会被取消)</summary>
+    public void PrepareForExit() => _allowClose = true;
+
+    private void HideToTray()
+    {
+        if (!IsVisible) return;
+
+        var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(130))
+        {
+            EasingFunction = new CircleEase { EasingMode = EasingMode.EaseIn }
+        };
+        fade.Completed += (_, _) =>
+        {
+            BeginAnimation(OpacityProperty, null); // 先清除动画,再复位基准透明度
+            Opacity = 1;
+            Hide();
+            HiddenToTray?.Invoke();
+        };
+        BeginAnimation(OpacityProperty, fade);
+    }
+
+    /// <summary>从托盘唤回时前置(隐藏后 Show 不会再次触发 Loaded,这里补一次轻微动画)</summary>
+    public void PlayResumeAnimation()
+    {
+        BeginAnimation(OpacityProperty, null);
+        Opacity = 0;
+        BeginAnimation(OpacityProperty,
+            new DoubleAnimation(1, TimeSpan.FromMilliseconds(160))
+            {
+                EasingFunction = new CircleEase { EasingMode = EasingMode.EaseOut }
+            });
+    }
 }

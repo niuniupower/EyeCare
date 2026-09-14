@@ -9,8 +9,8 @@
     <Nullable>enable</Nullable>
     <RootNamespace>EyeCare</RootNamespace>
     <AssemblyName>EyeCare</AssemblyName>
-    <Version>1.3.1</Version>
-    <Product>EyeCare 护眼卫士</Product>
+    <Version>1.7.0</Version>
+    <Product>暮瞳 DuskEye</Product>
     <Description>免费本地护眼工具:蓝光过滤、屏幕调光、休息提醒。完全离线,数据自主可控。</Description>
     <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>

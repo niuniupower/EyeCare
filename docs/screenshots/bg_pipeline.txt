@@ -1,0 +1,4 @@
+解析到的壁纸: C:\Users\Administrator\AppData\Roaming\Microsoft\Windows\Themes\TranscodedWallpaper
+有扩展名: False   (TranscodedWallpaper 正常应为 False)
+BuildBrush(blur=18): 成功
+画刷位图: 1280x800 Pbgra32
