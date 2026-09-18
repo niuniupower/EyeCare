@@ -56,6 +56,8 @@
          原则:**背景可换,亮部收敛**。
          ① 背景层 = 由 AppSettings.BackgroundMode 决定(内置哑光渐变 / 自定义图片 / 跟随桌面),
             换的只是 SettingsWindow 里 BgLayer 的 Background 画刷;
+            注意画刷本身已在 BackgroundStore 做过「暗玻璃」处理(模糊 + 压暗 + 去饱和),
+            遮罩滑杆再低背景也只是灰调暗图 —— 遮罩层不是唯一的亮度闸门;
          ② 遮罩层 = 下面 ScrimGlass,整层 Opacity 由「背景遮罩浓度」滑杆控制,
             把照片或桌面压暗到不刺眼;
          ③ 面板层 = GlassCardFill / GlassCardEdge 等,哑光深色卡片,只留一丝顶边高光。

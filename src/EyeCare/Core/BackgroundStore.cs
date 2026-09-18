@@ -13,9 +13,16 @@ namespace EyeCare.Core;
 /// 设置窗口的背景图。三种背景来源里有两种是「一张图」:
 ///   · image   = 用户选的图片,复制到 %APPDATA%\EyeCare\backgrounds 下持久化;
 ///   · desktop = 当前桌面壁纸,每次应用时现读现用(用户换壁纸后重新打开设置即可跟随)。
-/// 两者的模糊都在<b>像素层</b>做(降采样 → DrawingVisual + BlurEffect → RenderTargetBitmap → ImageBrush),
-/// 不把 BlurEffect 挂在元素上 —— 元素级模糊会把窗口四角的圆角一起糊掉,
-/// 而这里产出的画刷交给 Border.Background,圆角由 Border 自己裁,边缘永远是干净的。
+/// 两者都在<b>像素层</b>做完整处理(降采样 → DrawingVisual + BlurEffect → RenderTargetBitmap
+/// → 压暗去饱和 → ImageBrush),不把 BlurEffect 挂在元素上 —— 元素级模糊会把窗口四角的
+/// 圆角一起糊掉,而这里产出的画刷交给 Border.Background,圆角由 Border 自己裁,边缘永远是干净的。
+/// <para>
+/// 「模糊 + 黑遮罩」的老配方有两个治不好的毛病,是背景"又糊又耀眼"的根源:
+/// ① 高斯模糊把亮部搅开,一张亮壁纸会变成整片乳白光雾 —— 越模糊越亮;
+/// ② 深色遮罩是 lerp(c, 深色, α),只压亮度、<b>饱和度原样保留</b>,彩色壁纸照样花花绿绿地透上来。
+/// 所以在像素层加一道「暗玻璃」处理(见 <see cref="Render"/>):先把饱和度收掉,再把亮度整体
+/// 压进一个很低的区间 —— 之后无论遮罩滑杆拉到多低,背景最多也只是"灰调暗图",不可能再刺眼。
+/// </para>
 /// </summary>
 public static class BackgroundStore
 {
@@ -24,6 +31,14 @@ public static class BackgroundStore
 
     /// <summary>模糊前先把图片降到这个宽度再处理:省内存、省 CPU,压暗后肉眼看不出差别</summary>
     private const int WorkWidth = 1280;
+
+    // ── 暗玻璃配方 ──
+    /// <summary>去饱和比例(0-255):颜色通道向亮度收 96/256 ≈ 38%,壁纸退成灰调、不再抢注意力</summary>
+    private const int DesatMix = 96;
+    /// <summary>亮度压缩 out = Floor + in × Gain:纯白(255)封顶约 112,深夜也不刺眼;
+    /// 低值抬底色,模糊的暗角不至于死黑。遮罩滑杆在这之上再压,所以「浓度」低到 10% 也安全</summary>
+    private const double ToneFloor = 10;
+    private const double ToneGain = 0.40;
 
     /// <summary>超过这个大小的文件不当背景图处理,免得一个手滑把内存吃光</summary>
     private const long MaxBytes = 64L * 1024 * 1024;
@@ -144,7 +159,7 @@ public static class BackgroundStore
     // ── 画刷 ──
 
     /// <summary>
-    /// 生成背景画刷:等比裁切填满(UniformToFill)+ 居中,blur &gt; 0 时先做像素级高斯模糊。
+    /// 生成背景画刷:等比裁切填满(UniformToFill)+ 居中,先像素级模糊、再做「暗玻璃」压暗去饱和。
     /// 读不出来时返回 null,由调用方降级到内置渐变。
     /// <para>
     /// 一律按<b>字节流</b>解码,而不是把路径交给 BitmapImage:桌面壁纸(TranscodedWallpaper)
@@ -168,7 +183,8 @@ public static class BackgroundStore
             var src = Decode(data, downscale ? WorkWidth : 0);
             if (src is null) return null;
 
-            ImageSource final = blur <= 0 ? src : Blur(src, w, h, blur);
+            ImageSource? final = Render(src, w, h, blur);
+            if (final is null) return null;
 
             var brush = new ImageBrush(final)
             {
@@ -244,16 +260,62 @@ public static class BackgroundStore
         catch { return null; }
     }
 
-    private static ImageSource Blur(BitmapSource src, int w, int h, int radius)
+    /// <summary>
+    /// 背景图的完整像素处理:blur &gt; 0 先高斯模糊(消除细节),然后<b>一律</b>做「暗玻璃」——
+    /// 去饱和 + 亮度压缩。blur = 0 也要做:耀眼是亮度问题,跟模不模糊无关。
+    /// <para>
+    /// 为什么压缩必须做在<b>位图像素</b>里、而不是靠窗口上的遮罩层:遮罩是 lerp(c, 深色, α),
+    /// 无论怎么调 α 都治不了两件事 —— 亮部封不了顶(α 低时白壁纸照透),饱和度原样保留
+    /// (彩色照样刺眼)。像素层的 out = Floor + in×Gain 才是真正的亮度上限。
+    /// </para>
+    /// <para>
+    /// 模糊会把四边拉进半透明(Pbgra 预乘),先转成非预乘的 Bgra32 再逐像素处理,
+    /// 否则边缘会被二次压暗出一圈暗边。逐像素只有乘加 + 256 项查表,1280 宽的图约 10ms。
+    /// </para>
+    /// </summary>
+    private static ImageSource? Render(BitmapSource src, int w, int h, int blur)
     {
-        var dv = new DrawingVisual { Effect = new BlurEffect { Radius = radius, KernelType = KernelType.Gaussian } };
-        using (var dc = dv.RenderOpen())
-            dc.DrawImage(src, new Rect(0, 0, w, h));
+        try
+        {
+            var dv = new DrawingVisual();
+            if (blur > 0)
+                dv.Effect = new BlurEffect { Radius = blur, KernelType = KernelType.Gaussian };
+            using (var dc = dv.RenderOpen())
+                dc.DrawImage(src, new Rect(0, 0, w, h));
 
-        var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
-        rtb.Render(dv);
-        rtb.Freeze();
-        return rtb;
+            var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
+            rtb.Render(dv);
+
+            var bgra = new FormatConvertedBitmap(rtb, PixelFormats.Bgra32, null, 0);
+            int stride = w * 4;
+            var pixels = new byte[stride * h];
+            bgra.CopyPixels(pixels, stride, 0);
+
+            // 亮度压缩查表:循环里只剩一次查表,不再做浮点
+            var lut = new byte[256];
+            for (int i = 0; i < 256; i++)
+                lut[i] = (byte)Math.Round(ToneFloor + ToneGain * i);
+
+            for (int p = 0; p < pixels.Length; p += 4)
+            {
+                int b = pixels[p], g = pixels[p + 1], r = pixels[p + 2];
+                // ITU-R 601 亮度,定点化:(0.299, 0.587, 0.114) × 65536,正好凑满 2^16
+                int lum = (r * 19595 + g * 38470 + b * 7471) >> 16;
+                pixels[p]     = lut[b + ((lum - b) * DesatMix >> 8)];
+                pixels[p + 1] = lut[g + ((lum - g) * DesatMix >> 8)];
+                pixels[p + 2] = lut[r + ((lum - r) * DesatMix >> 8)];
+                // alpha 不动
+            }
+
+            var result = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, pixels, stride);
+            result.Freeze();
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("背景暗玻璃处理失败: " + ex.Message);
+            return null;
+        }
     }
 
     private static void TryDelete(string path)

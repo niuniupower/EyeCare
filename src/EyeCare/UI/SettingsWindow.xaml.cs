@@ -39,8 +39,8 @@ public partial class SettingsWindow : Window
     private const string AutoStartOnHint = "已注册:当前用户登录后自动启动(带 --silent 参数,不弹窗打扰)。";
     private const string AutoStartOffHint = "未启用。启用后写入注册表 Run 项,登录时静默启动。";
 
-    private const string BgDimHint = "遮罩越浓,背景越暗越护眼;模糊负责把照片细节抹平,免得抢注意力。";
-    private const string BgDesktopHint = "背景就是你当前的桌面壁纸,自动读取并模糊;换过壁纸后重新打开这个窗口就会跟上。";
+    private const string BgDimHint = "背景在像素层已自动压暗、去饱和,再亮的图也只是灰调;遮罩越浓越沉,模糊负责抹平细节。";
+    private const string BgDesktopHint = "背景就是你当前的桌面壁纸,自动读取并压暗去饱和;换过壁纸后重新打开这个窗口就会跟上。";
     private const string BgMatteHint = "内置渐变本身就很暗,不需要遮罩和模糊。";
 
     /// <summary>窗口被收进托盘(此时应用仍在后台运行)</summary>
@@ -499,9 +499,9 @@ public partial class SettingsWindow : Window
     /// 把「外观」页的选择落到窗口背景上。
     /// <para>
     /// desktop 与 image 只差「图从哪来」—— 一个是当前桌面壁纸(每次现读),一个是用户选的图片 ——
-    /// 之后完全同路:像素层模糊 → 交给 <c>BgLayer.Background</c>。
+    /// 之后完全同路:像素层模糊 + 暗玻璃压暗去饱和(BackgroundStore.Render)→ 交给 <c>BgLayer.Background</c>。
     /// 早期版本这里走的是「窗口透明 + 系统亚克力」,实测无效:分层窗口拿不到 DWM 模糊,
-    /// 透出来的是<b>清晰明亮</b>的真实桌面,反而最晃眼。所以改成自己读壁纸自己模糊,结果完全可控。
+    /// 透出来的是<b>清晰明亮</b>的真实桌面,反而最晃眼。所以改成自己读壁纸自己处理,结果完全可控。
     /// </para>
     /// 任何一步失败都退回内置渐变:背景读不出来时半透明面板糊在空白上是最糟的状态。
     /// </summary>
@@ -682,12 +682,12 @@ public partial class SettingsWindow : Window
     {
         _settings.BackgroundMode = "desktop";
         _settings.BackgroundDim = 80;
-        _settings.BackgroundBlur = 18;
+        _settings.BackgroundBlur = 10;
 
         _loading = true;
         BgDesktopMode.IsChecked = true;
         SldDim.Value = 80;
-        SldBlur.Value = 18;
+        SldBlur.Value = 10;
         _loading = false;
 
         _bgBrush = null;

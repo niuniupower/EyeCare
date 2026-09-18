@@ -12,7 +12,7 @@ public static class SettingsStore
     private static readonly object Lock = new();
 
     /// <summary>当前配置结构版本,见 AppSettings.ConfigRevision / Migrate</summary>
-    private const int CurrentRevision = 1;
+    private const int CurrentRevision = 2;
 
     public static AppSettings Load()
     {
@@ -43,6 +43,11 @@ public static class SettingsStore
     /// 用户升级后观感跟以前一模一样,会以为改动根本没生效。
     /// 只迁「还是旧默认值」的情况:自己选过图片(image)的不动,那是用户的明确选择。
     /// </para>
+    /// <para>
+    /// revision 2(v1.7.2):背景配方重做 —— 像素层压暗 + 去饱和(见 BackgroundStore),
+    /// 默认模糊 18 → 10。老配置里存的是按旧配方调的数值(模糊越大越糊、亮壁纸还耀眼),
+    /// 直接沿用还是那副观感;统一拉回新配方默认值,不合口味仍可用滑杆自己调。
+    /// </para>
     /// </summary>
     private static AppSettings Migrate(AppSettings s)
     {
@@ -51,8 +56,14 @@ public static class SettingsStore
         if (s.ConfigRevision < 1 && s.BackgroundMode == "matte")
             s.BackgroundMode = "desktop";
 
+        if (s.ConfigRevision < 2)
+        {
+            s.BackgroundDim = 80;
+            s.BackgroundBlur = 10;
+        }
+
         s.ConfigRevision = CurrentRevision;
-        Logger.Info($"配置已迁移到 revision {CurrentRevision}(背景来源 = {s.BackgroundMode})");
+        Logger.Info($"配置已迁移到 revision {CurrentRevision}(背景来源 = {s.BackgroundMode},模糊 = {s.BackgroundBlur}px)");
         Save(s);
         return s;
     }
