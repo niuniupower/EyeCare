@@ -72,23 +72,39 @@ public sealed class OverlayManager
         {
             if (showTint)
             {
-                w.Background = new SolidColorBrush(tint!.Value);
+                SetSolid(w, tint!.Value);
                 EnsureVisible(w);
             }
             else if (w.IsVisible) w.Hide();
         }
 
         bool showDim = dimAlpha > 0.005;
+        var dimColor = Color.FromArgb((byte)Math.Round(Math.Clamp(dimAlpha, 0, 1) * 255), 0, 0, 0);
         foreach (var w in _dim)
         {
             if (showDim)
             {
-                byte a = (byte)Math.Round(Math.Clamp(dimAlpha, 0, 1) * 255);
-                w.Background = new SolidColorBrush(Color.FromArgb(a, 0, 0, 0));
+                SetSolid(w, dimColor);
                 EnsureVisible(w);
             }
             else if (w.IsVisible) w.Hide();
         }
+    }
+
+    /// <summary>
+    /// 就地改颜色,而不是每次 new 一个画刷。这两层遮罩是 <b>满屏</b> 的:
+    /// 拖亮度滑杆时每来一个值都换画刷,会连带触发一次全屏重绘,拖起来一顿一顿的。
+    /// 加上「换算成字节后颜色没变就整条跳过」—— 亮度低于 50% 时遮罩深度按 1/255 量化,
+    /// 相邻两格经常落在同一个字节上,这一层就直接省掉了。
+    /// </summary>
+    private static void SetSolid(Window w, Color c)
+    {
+        if (w.Background is SolidColorBrush { IsFrozen: false } sb)
+        {
+            if (sb.Color == c) return;
+            sb.Color = c;
+        }
+        else w.Background = new SolidColorBrush(c);
     }
 
     public void HideAll()

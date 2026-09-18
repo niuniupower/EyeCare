@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  暮瞳 DuskEye 安装包定义(WiX v5 / MSI)
+
+  构建入口:installer\build-installer.ps1 —— 不要直接 wix build,版本号与源文件路径
+  由脚本从 EyeCare.csproj 读出后以 -d 传进来,避免两处版本号不一致。
+
+  设计要点:
+    · perMachine 安装,默认落在 Program Files,向导第二页可"更改"安装位置(可浏览/可手输);
+    · 只装一个 EyeCare.exe(自包含单文件),卸载时整目录清掉;
+    · 用户配置在 %APPDATA%\EyeCare,不属于 MSI 组件,卸载时**保留**(重装不丢设置);
+    · UpgradeCode 是升级识别码,一旦发布就**永远不要改**,否则新版本不会覆盖旧版本。
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <Package Name="暮瞳 DuskEye"
+           Manufacturer="DuskEye"
+           Version="$(AppVersion)"
+           UpgradeCode="3FF3952B-06EC-4A93-946C-A56670ECFB29"
+           Language="2052"
+           Scope="perMachine"
+           InstallerVersion="500"
+           Compressed="yes">
+
+    <SummaryInformation Description="暮瞳 DuskEye $(AppVersion) 安装程序 —— 免费本地护眼工具"
+                       Manufacturer="DuskEye" />
+
+    <!-- 已装更高版本时拦住降级安装 -->
+    <MajorUpgrade DowngradeErrorMessage="本机已安装更新版本的 [ProductName]。若要改用旧版本,请先从「应用和功能」中卸载。" />
+
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <!--
+      安装向导:欢迎 → 许可协议 → 安装位置(可更改) → 确认 → 安装 → 完成
+      WixUILicenseRtf 是许可页的必填变量,内容由构建脚本生成(见 make-license-rtf.ps1)。
+      这里必须收绝对路径:相对路径是按 wix 进程的工作目录找的,不是按 .wxs 所在目录。
+    -->
+    <WixVariable Id="WixUILicenseRtf" Value="$(LicenseRtf)" />
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+
+    <!-- 完成页的「立即启动」勾选框 -->
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="立即启动 暮瞳 DuskEye(会在后台常驻托盘)" />
+    <Property Id="WixShellExecTarget" Value="[#EyeCareExe]" />
+    <!-- Return="ignore":安装此时已经完成,启动失败也不该把整个安装判为失败 -->
+    <CustomAction Id="LaunchApplication" BinaryRef="Wix4UtilCA_X86" DllEntry="WixShellExec"
+                  Impersonate="yes" Return="ignore" />
+    <UI>
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchApplication"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed" />
+    </UI>
+
+    <!-- 目录结构 -->
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="暮瞳 DuskEye" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="AppMenuFolder" Name="暮瞳 DuskEye" />
+    </StandardDirectory>
+    <StandardDirectory Id="DesktopFolder" />
+
+    <Feature Id="Main" Title="暮瞳 DuskEye" Level="1" AllowAbsent="no">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentGroupRef Id="AppShortcuts" />
+    </Feature>
+
+    <!-- 程序本体:自包含单文件,无外部依赖 -->
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Component Id="MainExecutable" Guid="ADFEFD36-A768-4A62-867F-2853CFECB8DE">
+        <File Id="EyeCareExe" Source="$(AppSourceDir)\EyeCare.exe" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!--
+      快捷方式。KeyPath 必须是 HKCU 注册表项 —— 桌面/开始菜单属于"用户配置文件数据",
+      ICE38/ICE43/ICE57 都要求这类组件以 HKCU 为键路径;挂 HKLM 会被判为
+      "per-user 数据配 per-machine 键路径"。
+    -->
+    <ComponentGroup Id="AppShortcuts">
+      <Component Id="StartMenuShortcut" Directory="AppMenuFolder"
+                 Guid="5A434099-417C-435B-A0D3-828DB16A8FED">
+        <Shortcut Id="StartMenuLink" Name="暮瞳 DuskEye"
+                  Description="护眼滤光与休息提醒(常驻托盘)"
+                  Target="[#EyeCareExe]" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon" />
+        <RemoveFolder Id="RemoveAppMenuFolder" Directory="AppMenuFolder" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\DuskEye\EyeCare" Name="StartMenuShortcut"
+                       Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+
+      <Component Id="DesktopShortcut" Directory="DesktopFolder"
+                 Guid="8528617A-A015-44AC-B5EE-31D7A57356E3">
+        <Shortcut Id="DesktopLink" Name="暮瞳 DuskEye"
+                  Description="护眼滤光与休息提醒(常驻托盘)"
+                  Target="[#EyeCareExe]" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon" />
+        <RegistryValue Root="HKCU" Key="Software\DuskEye\EyeCare" Name="DesktopShortcut"
+                       Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- 控制面板「应用和功能」里的图标与信息 -->
+    <Icon Id="AppIcon" SourceFile="$(IconPath)" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <!-- ARPNOMODIFY / ARPNOREPAIR 由 WixUI_InstallDir 自带,重复定义会报 WIX0091 -->
+    <Property Id="ARPCOMMENTS" Value="免费本地护眼工具:蓝光过滤、屏幕调光、休息提醒。完全离线,无联网、无账户。" />
+
+  </Package>
+</Wix>

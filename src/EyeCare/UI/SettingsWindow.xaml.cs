@@ -20,6 +20,8 @@ public partial class SettingsWindow : Window
     private readonly BreakManager _break;
     private readonly Action _reRegisterHotkeys;
     private readonly DispatcherTimer _debounce;
+    /// <summary>「背景模糊」画刷重建的防抖(见构造函数:一次重建要 176~305ms,逐格重算会卡死 UI)</summary>
+    private readonly DispatcherTimer _bgBlurDebounce;
     private bool _loading = true;
     private bool _allowClose;
 
@@ -52,12 +54,26 @@ public partial class SettingsWindow : Window
         _break = breakMgr;
         _reRegisterHotkeys = reRegisterHotkeys;
 
+        // 防抖只负责「落盘」,不负责「上屏」。
+        // 早先这里连 _filter.Apply() 一起等 300ms,加上 Apply 内部 900ms 的缓动,
+        // 拖一下滑杆要 1.2 秒之后画面才开始动 —— 用户看到的就是"拉了没反应"。
+        // 现在上屏走 Sld_ValueChanged 里的 ApplyLive(τ=40ms 一阶跟随),落盘仍然防抖。
         _debounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
         _debounce.Tick += (_, _) =>
         {
             _debounce.Stop();
             SettingsStore.Save(_settings);
-            _filter.Apply();
+        };
+
+        // 「背景模糊」滑杆每动一格都要重走 BackgroundStore.BuildBrush:重新解码 + 降采样 1280 +
+        // 软件高斯模糊 + RenderTargetBitmap。本机实测 blur=18 要 176ms、blur=40 要 305ms ——
+        // 逐格重算会把 UI 线程占满,拖起来直接卡死,所以延后到"停下来"再重算。
+        // 遮罩浓度只是改 ScrimLayer.Opacity,不需要重算画刷,保持即时反馈。
+        _bgBlurDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(160) };
+        _bgBlurDebounce.Tick += (_, _) =>
+        {
+            _bgBlurDebounce.Stop();
+            ApplyBackground(rebuildBrush: true);
         };
 
         LoadValues();
@@ -137,7 +153,8 @@ public partial class SettingsWindow : Window
         _settings.SelectedPreset = MatchPreset();
         SyncPresetChips();
         UpdatePreview();
-        Debounce();
+        _filter.ApplyLive();   // 立刻跟手(τ=40ms 一阶跟随),不等防抖
+        Debounce();            // 只把落盘推迟到"拖完停下来"
     }
 
     // ── 色调模式 ──
@@ -174,9 +191,11 @@ public partial class SettingsWindow : Window
         if (sender is RadioButton { Tag: string tag })
         {
             var parts = tag.Split(',');
+            // 两行赋值各自触发 Sld_ValueChanged → ApplyLive,值已经实时上屏了,
+            // 所以这里只需要落盘,不必再走一次 900ms 的慢过渡把画面拖慢。
             SldTemp.Value = double.Parse(parts[0]);
             SldBright.Value = double.Parse(parts[1]);
-            PersistAndApply();
+            SettingsStore.Save(_settings);
         }
     }
 
@@ -594,10 +613,19 @@ public partial class SettingsWindow : Window
         _settings.BackgroundDim = (int)SldDim.Value;
         _settings.BackgroundBlur = (int)SldBlur.Value;
 
-        // 只有模糊变化才需要重算图片画刷;拖遮罩时复用缓存,免得每动一格都重做高斯模糊
-        ApplyBackground(rebuildBrush: sender == SldBlur);
+        if (sender == SldBlur)
+        {
+            // 模糊:重算画刷很贵(176~305ms/次),防抖到停下来再算。数字先动,背景随后跟上。
+            _bgBlurDebounce.Stop();
+            _bgBlurDebounce.Start();
+        }
+        else
+        {
+            // 遮罩:只需改 ScrimLayer.Opacity,复用缓存画刷,即时反馈
+            ApplyBackground(rebuildBrush: false);
+        }
         UpdateBgSummary();
-        SettingsStore.Save(_settings);
+        Debounce();     // 落盘防抖
     }
 
     private void PickBackground_Click(object sender, RoutedEventArgs e)

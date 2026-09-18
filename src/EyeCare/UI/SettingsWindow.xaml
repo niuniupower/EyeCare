@@ -4,7 +4,18 @@
         Title="暮瞳 DuskEye" Width="880" Height="676"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ResizeMode="NoResize" WindowStartupLocation="CenterScreen"
+        UseLayoutRounding="True" SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display"
         FontFamily="Microsoft YaHei UI, Segoe UI">
+    <!-- 文字清晰度的三条设置,针对的都是"主界面看着发虚":
+         ① 不要再给承载文字的容器挂 Effect —— WPF 的 Effect 会把整个子树光栅化成中间纹理,
+            文字因此丢掉 ClearType、还会被非整数倍重采样(原先 Hero 卡与强调按钮就是这个问题);
+         ② TextFormattingMode=Display —— 默认的 Ideal 用浮点字距排字,12px 上下的小字会发虚;
+            Display 会把字形的推进量对齐到整像素,这是 WPF 官方对小字号推荐的模式;
+         ③ UseLayoutRounding + SnapsToDevicePixels —— 让 1px 描边与文字基线落在整像素上,
+            否则半像素位置的细线和文字边缘都会被糊掉。
+         注:窗口是分层窗口(AllowsTransparency=True,为了圆角),Windows 在这种情况下不提供
+         ClearType 次像素抗锯齿 —— 这是拿"圆角无锯齿"换来的,属于已知取舍。 -->
     <!-- ═══ 背景三层:① BgLayer 背景来源(渐变/图片/桌面)② ScrimLayer 遮罩浓度 ③ 里面的哑光卡片 ═══
          BgLayer 用 Background 画刷而不是 Image 元素:圆角由 Border 自己裁,窗口四角永远是干净的,
          也顺带避开了「元素级模糊把圆角糊掉」的问题(模糊在 BackgroundStore 里对像素做)。 -->
@@ -89,7 +100,7 @@
                             </StackPanel>
                         </Border>
 
-                        <TextBlock Grid.Row="4" Text="v1.7.0 · 本地运行" FontSize="11" Foreground="#FF5C6170"
+                        <TextBlock Grid.Row="4" Text="v1.7.1 · 本地运行" FontSize="11" Foreground="#FF5C6170"
                                    Margin="20,0,0,18"/>
                     </Grid>
                 </Border>
@@ -127,37 +138,42 @@
                             <!-- ═══════════ 护眼滤光 ═══════════ -->
                             <StackPanel x:Name="FilterPanel">
                                 <!-- Hero:开关 + 当前状态 + 实时预览 -->
-                                <Border Style="{StaticResource HeroCard}" Margin="0,0,0,14">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="236"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                            <CheckBox x:Name="ChkFilter" Style="{StaticResource Switch}"
-                                                      Content="启用护眼滤光" Checked="ChkFilter_Changed" Unchecked="ChkFilter_Changed"/>
-                                            <StackPanel Orientation="Horizontal" Margin="0,13,0,0">
-                                                <Ellipse x:Name="DotHero" Width="7" Height="7" VerticalAlignment="Center"
-                                                         Fill="{StaticResource Accent}"/>
-                                                <TextBlock x:Name="TxtHeroSummary" Text="暖色色温 · 4800 K · 亮度 100 %"
-                                                           Margin="8,0,0,0" FontSize="15" FontWeight="SemiBold"
-                                                           VerticalAlignment="Center" Foreground="{StaticResource Text}"/>
+                                <!-- Hero:光晕与卡片必须分成两层(见 Theme.xaml 的 HeroGlow 注释)——
+                                     Effect 会光栅化整个子树,挂在卡片上会让里面的文字一起发虚 -->
+                                <Grid Margin="0,0,0,14">
+                                    <Border Style="{StaticResource HeroGlow}"/>
+                                    <Border Style="{StaticResource HeroCard}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="236"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                <CheckBox x:Name="ChkFilter" Style="{StaticResource Switch}"
+                                                          Content="启用护眼滤光" Checked="ChkFilter_Changed" Unchecked="ChkFilter_Changed"/>
+                                                <StackPanel Orientation="Horizontal" Margin="0,13,0,0">
+                                                    <Ellipse x:Name="DotHero" Width="7" Height="7" VerticalAlignment="Center"
+                                                             Fill="{StaticResource Accent}"/>
+                                                    <TextBlock x:Name="TxtHeroSummary" Text="暖色色温 · 4800 K · 亮度 100 %"
+                                                               Margin="8,0,0,0" FontSize="15" FontWeight="SemiBold"
+                                                               VerticalAlignment="Center" Foreground="{StaticResource Text}"/>
+                                                </StackPanel>
+                                                <TextBlock Text="在显卡 gamma 层完成色调变换,截图与录屏不受影响。"
+                                                           Style="{StaticResource Hint}" Margin="0,10,0,0"/>
                                             </StackPanel>
-                                            <TextBlock Text="在显卡 gamma 层完成色调变换,截图与录屏不受影响。"
-                                                       Style="{StaticResource Hint}" Margin="0,10,0,0"/>
-                                        </StackPanel>
-                                        <Border x:Name="PreviewBand" Grid.Column="1" CornerRadius="12" Padding="16,12"
-                                                Margin="18,0,0,0" BorderBrush="#26FFFFFF" BorderThickness="1">
-                                            <StackPanel VerticalAlignment="Center">
-                                                <TextBlock Text="预览 · 暮瞳 DuskEye" FontSize="13.5" FontWeight="SemiBold"
-                                                           x:Name="PreviewTitle"/>
-                                                <TextBlock Text="The quick brown fox 0123456789"
-                                                           FontSize="11.5" Opacity="0.9" Margin="0,5,0,0"
-                                                           TextWrapping="Wrap" x:Name="PreviewSub"/>
-                                            </StackPanel>
-                                        </Border>
-                                    </Grid>
-                                </Border>
+                                            <Border x:Name="PreviewBand" Grid.Column="1" CornerRadius="12" Padding="16,12"
+                                                    Margin="18,0,0,0" BorderBrush="#26FFFFFF" BorderThickness="1">
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="预览 · 暮瞳 DuskEye" FontSize="13.5" FontWeight="SemiBold"
+                                                               x:Name="PreviewTitle"/>
+                                                    <TextBlock Text="The quick brown fox 0123456789"
+                                                               FontSize="11.5" Opacity="0.9" Margin="0,5,0,0"
+                                                               TextWrapping="Wrap" x:Name="PreviewSub"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
 
                                 <!-- 两栏栅格:左=色调主控,右=强度与场景 -->
                                 <Grid>
@@ -295,29 +311,32 @@
 
                             <!-- ═══════════ 休息提醒 ═══════════ -->
                             <StackPanel x:Name="BreakPanel" Visibility="Collapsed">
-                                <!-- Hero:倒计时 + 主操作提到最上层 -->
-                                <Border Style="{StaticResource HeroCard}" Margin="0,0,0,14">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                            <CheckBox x:Name="ChkBreak" Style="{StaticResource Switch}" Content="启用休息提醒"
-                                                      Checked="ChkBreak_Changed" Unchecked="ChkBreak_Changed"/>
-                                            <TextBlock Text="遵循 20-20-20 护眼法则:每 20 分钟,远眺 20 英尺(约 6 米)外的物体 20 秒。"
-                                                       Style="{StaticResource Hint}" Margin="0,10,0,0"/>
-                                            <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                                                <TextBlock x:Name="TxtNextBreak" Text="--:--" Style="{StaticResource StatValue}"/>
-                                                <TextBlock x:Name="TxtBreakState" Text="距下次休息" Style="{StaticResource StatUnit}"
-                                                           Margin="9,0,0,5"/>
+                                <!-- Hero:倒计时 + 主操作提到最上层(光晕层 + 卡片层,见 Theme.xaml 的 HeroGlow) -->
+                                <Grid Margin="0,0,0,14">
+                                    <Border Style="{StaticResource HeroGlow}"/>
+                                    <Border Style="{StaticResource HeroCard}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                <CheckBox x:Name="ChkBreak" Style="{StaticResource Switch}" Content="启用休息提醒"
+                                                          Checked="ChkBreak_Changed" Unchecked="ChkBreak_Changed"/>
+                                                <TextBlock Text="遵循 20-20-20 护眼法则:每 20 分钟,远眺 20 英尺(约 6 米)外的物体 20 秒。"
+                                                           Style="{StaticResource Hint}" Margin="0,10,0,0"/>
+                                                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                                    <TextBlock x:Name="TxtNextBreak" Text="--:--" Style="{StaticResource StatValue}"/>
+                                                    <TextBlock x:Name="TxtBreakState" Text="距下次休息" Style="{StaticResource StatUnit}"
+                                                               Margin="9,0,0,5"/>
+                                                </StackPanel>
                                             </StackPanel>
-                                        </StackPanel>
-                                        <Button x:Name="BtnBreakNow" Grid.Column="1" Content="立即休息一次"
-                                                Style="{StaticResource BtnAccent}" Width="150" Height="44"
-                                                Padding="0" VerticalAlignment="Center" Click="BreakNow_Click"/>
-                                    </Grid>
-                                </Border>
+                                            <Button x:Name="BtnBreakNow" Grid.Column="1" Content="立即休息一次"
+                                                    Style="{StaticResource BtnAccent}" Width="150" Height="44"
+                                                    Padding="0" VerticalAlignment="Center" Click="BreakNow_Click"/>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
 
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -464,7 +483,7 @@
                                             <StackPanel>
                                                 <TextBlock Text="关于" Style="{StaticResource CardTitle}"/>
                                                 <TextBlock Style="{StaticResource Hint}" Margin="0,10,0,0"
-                                                           Text="暮瞳 DuskEye v1.7.0 · 自用免费 · 完全本地运行,无任何联网、无任何账户。&#x0a;配置与日志保存在 %APPDATA%\EyeCare。代码完全属于你,可自由修改与分发。"/>
+                                                           Text="暮瞳 DuskEye v1.7.1 · 自用免费 · 完全本地运行,无任何联网、无任何账户。&#x0a;配置与日志保存在 %APPDATA%\EyeCare。代码完全属于你,可自由修改与分发。"/>
                                             </StackPanel>
                                         </Border>
                                     </StackPanel>
@@ -473,42 +492,45 @@
 
                             <!-- ═══════════ 外观 ═══════════ -->
                             <StackPanel x:Name="LookPanel" Visibility="Collapsed">
-                                <!-- Hero:背景来源三选 + 当前摘要 -->
-                                <Border Style="{StaticResource HeroCard}" Margin="0,0,0,14">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                            <TextBlock Text="背景来源" Style="{StaticResource FieldLabel}"/>
-                                            <WrapPanel Margin="0,9,0,0">
-                                                <RadioButton x:Name="BgDesktopMode" Style="{StaticResource PresetChip}"
-                                                             Content="🖥 跟随桌面壁纸" Tag="desktop" Checked="BgMode_Checked"/>
-                                                <RadioButton x:Name="BgImageMode" Style="{StaticResource PresetChip}"
-                                                             Content="🖼 自定义图片" Tag="image" Checked="BgMode_Checked"/>
-                                                <RadioButton x:Name="BgMatte" Style="{StaticResource PresetChip}"
-                                                             Content="🌑 内置渐变" Tag="matte" Checked="BgMode_Checked"/>
-                                            </WrapPanel>
-                                            <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
-                                                <Ellipse x:Name="DotBg" Width="7" Height="7" VerticalAlignment="Center"
-                                                         Fill="{StaticResource Accent}"/>
-                                                <TextBlock x:Name="TxtBgSummary" Text="正在读取背景…"
-                                                           Margin="8,0,0,0" FontSize="15" FontWeight="SemiBold"
-                                                           VerticalAlignment="Center" Foreground="{StaticResource Text}"/>
+                                <!-- Hero:背景来源三选 + 当前摘要(光晕层 + 卡片层,见 Theme.xaml 的 HeroGlow) -->
+                                <Grid Margin="0,0,0,14">
+                                    <Border Style="{StaticResource HeroGlow}"/>
+                                    <Border Style="{StaticResource HeroCard}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                <TextBlock Text="背景来源" Style="{StaticResource FieldLabel}"/>
+                                                <WrapPanel Margin="0,9,0,0">
+                                                    <RadioButton x:Name="BgDesktopMode" Style="{StaticResource PresetChip}"
+                                                                 Content="🖥 跟随桌面壁纸" Tag="desktop" Checked="BgMode_Checked"/>
+                                                    <RadioButton x:Name="BgImageMode" Style="{StaticResource PresetChip}"
+                                                                 Content="🖼 自定义图片" Tag="image" Checked="BgMode_Checked"/>
+                                                    <RadioButton x:Name="BgMatte" Style="{StaticResource PresetChip}"
+                                                                 Content="🌑 内置渐变" Tag="matte" Checked="BgMode_Checked"/>
+                                                </WrapPanel>
+                                                <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                                                    <Ellipse x:Name="DotBg" Width="7" Height="7" VerticalAlignment="Center"
+                                                             Fill="{StaticResource Accent}"/>
+                                                    <TextBlock x:Name="TxtBgSummary" Text="正在读取背景…"
+                                                               Margin="8,0,0,0" FontSize="15" FontWeight="SemiBold"
+                                                               VerticalAlignment="Center" Foreground="{StaticResource Text}"/>
+                                                </StackPanel>
+                                                <TextBlock Text="只影响这个设置窗口自身,不影响屏幕滤光与休息提醒。"
+                                                           Style="{StaticResource Hint}" Margin="0,10,0,0"/>
                                             </StackPanel>
-                                            <TextBlock Text="只影响这个设置窗口自身,不影响屏幕滤光与休息提醒。"
-                                                       Style="{StaticResource Hint}" Margin="0,10,0,0"/>
-                                        </StackPanel>
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="18,0,0,0">
-                                            <Button x:Name="BtnPickBg" Content="选择图片…" Style="{StaticResource Btn}"
-                                                    Width="120" Height="38" Padding="0" Click="PickBackground_Click"/>
-                                            <Button x:Name="BtnClearBg" Content="清除图片" Style="{StaticResource Btn}"
-                                                    Width="120" Height="32" Padding="0" Margin="0,8,0,0"
-                                                    Click="ClearBackground_Click"/>
-                                        </StackPanel>
-                                    </Grid>
-                                </Border>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="18,0,0,0">
+                                                <Button x:Name="BtnPickBg" Content="选择图片…" Style="{StaticResource Btn}"
+                                                        Width="120" Height="38" Padding="0" Click="PickBackground_Click"/>
+                                                <Button x:Name="BtnClearBg" Content="清除图片" Style="{StaticResource Btn}"
+                                                        Width="120" Height="32" Padding="0" Margin="0,8,0,0"
+                                                        Click="ClearBackground_Click"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </Grid>
 
                                 <Grid>
                                     <Grid.ColumnDefinitions>

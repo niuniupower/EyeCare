@@ -128,17 +128,31 @@
         <Setter Property="CornerRadius" Value="14"/>
     </Style>
 
-    <!-- Hero 卡:承载「当前状态」。琥珀柔光从 26/0.16 收到 18/0.07 ——
-         这层光晕是上一版最"晃眼睛"的元凶之一(卡片周围一圈发亮的橙雾) -->
+    <!-- Hero 卡:承载「当前状态」。
+         ⚠ 这里**故意不挂 Effect**。原先的写法是给 HeroCard 本身挂一个
+         DropShadowEffect(琥珀光晕)—— 但 WPF 的 Effect 会把**整个子树**光栅化成一张中间纹理
+         再过一遍着色器:卡片里的标题、状态摘要、提示文字全都因此丢掉 ClearType、还被非整数倍的
+         纹理重采样,肉眼看到的就是"主界面文字发虚"。
+         正确做法是光晕与内容分开(见下面的 HeroGlow),两个 Border 叠在同一个 Grid 里。 -->
     <Style x:Key="HeroCard" TargetType="Border">
         <Setter Property="Background" Value="{StaticResource GlassHeroFill}"/>
         <Setter Property="BorderBrush" Value="{StaticResource GlassCardEdge}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="CornerRadius" Value="18"/>
         <Setter Property="Padding" Value="22,20"/>
+    </Style>
+
+    <!-- Hero 卡的外发光:一层空的 Border,尺寸跟着同 Grid 里的卡片走。
+         它本身没有文字,被 Effect 光栅化无所谓;卡片里的文字则一点没受影响。
+         亮度仍是收敛的 0.07(与上一版 DropShadowEffect 的 Opacity 完全一致,观感不变)。 -->
+    <Style x:Key="HeroGlow" TargetType="Border">
+        <Setter Property="CornerRadius" Value="18"/>
+        <Setter Property="Background" Value="#FFFF9A3E"/>
+        <Setter Property="Opacity" Value="0.07"/>
+        <Setter Property="IsHitTestVisible" Value="False"/>
         <Setter Property="Effect">
             <Setter.Value>
-                <DropShadowEffect Color="#FFFF9A3E" BlurRadius="18" ShadowDepth="0" Opacity="0.07"/>
+                <BlurEffect Radius="18" KernelType="Gaussian"/>
             </Setter.Value>
         </Setter>
     </Style>
@@ -333,19 +347,28 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="Bd" CornerRadius="10" Background="{TemplateBinding Background}"
-                            Padding="{TemplateBinding Padding}">
-                        <Border.Effect>
-                            <DropShadowEffect Color="#FFFF9A3E" BlurRadius="16" ShadowDepth="0" Opacity="0.22"/>
-                        </Border.Effect>
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
+                    <Grid>
+                        <!-- 发光单独一层:Effect 只挂在它身上。
+                             挂到下面那个含 ContentPresenter 的 Border 上时,
+                             按钮文字会被一起光栅化 → 标题一样发虚。 -->
+                        <Border x:Name="Glow" CornerRadius="10" Background="{TemplateBinding Background}">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#FFFF9A3E" BlurRadius="16" ShadowDepth="0" Opacity="0.22"/>
+                            </Border.Effect>
+                        </Border>
+                        <Border x:Name="Bd" CornerRadius="10" Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Bd" Property="Opacity" Value="0.9"/>
+                            <Setter TargetName="Glow" Property="Opacity" Value="0.9"/>
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="Bd" Property="Opacity" Value="0.75"/>
+                            <Setter TargetName="Glow" Property="Opacity" Value="0.75"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter Property="Opacity" Value="0.45"/>

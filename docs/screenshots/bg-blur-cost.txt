@@ -1,0 +1,6 @@
+「背景模糊」滑杆拖动一格的开销(同一台机器实测)
+BuildBrush(blur= 0) =    38.8 ms
+BuildBrush(blur=12) =   143.5 ms
+BuildBrush(blur=18) =   177.7 ms
+BuildBrush(blur=30) =   241.4 ms
+BuildBrush(blur=40) =   307.9 ms

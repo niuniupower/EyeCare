@@ -58,14 +58,53 @@ public sealed class GammaController : IDisposable
         public ushort[]? OriginalGreen;
         public ushort[]? OriginalBlue;
         public bool OriginalSaved;
+        /// <summary>上一次真正写进这块显示器的 ramp。用来跳过"完全没变化"的重复写入</summary>
+        public GammaNative.RAMP? LastWritten;
     }
 
     public List<MonitorHandle> Monitors { get; } = new();
 
-    /// <summary>最近一次 gamma 写入是否成功(遮罩兜底的判断依据)</summary>
+    /// <summary>最近一次<b>带校验</b>的 gamma 写入是否成功(遮罩兜底的判断依据)</summary>
     public bool LastApplySucceeded { get; private set; } = true;
 
     private bool _loggedGammaState = true;
+
+    // ── 传递函数查表 ──
+    // 构建 ramp 是逐帧跑的(过渡期间每帧一次 × 显示器数),而 Math.Pow 是这条路径上唯一的重活:
+    // 每个采样点 1 次 SrgbToLinear + 3 次 LinearToSrgb,一帧就是 1024 次超越函数调用。
+    // 换成查表后整条路径没有 Pow,拖滑杆时不会因为算 ramp 把 UI 线程占住。
+    private const int LinSrgbLutSize = 4096;
+    private static readonly double[] SrgbToLinearLut = BuildSrgbToLinearLut();
+    private static readonly double[] LinearToSrgbLut = BuildLinearToSrgbLut();
+
+    private static double[] BuildSrgbToLinearLut()
+    {
+        var t = new double[256];
+        for (int i = 0; i < 256; i++) t[i] = SrgbToLinear(i / 255.0);
+        return t;
+    }
+
+    private static double[] BuildLinearToSrgbLut()
+    {
+        var t = new double[LinSrgbLutSize];
+        for (int i = 0; i < LinSrgbLutSize; i++) t[i] = LinearToSrgb((double)i / (LinSrgbLutSize - 1));
+        return t;
+    }
+
+    /// <summary>
+    /// 线性光 → sRGB(查表 + 线性插值)。
+    /// 4096 级插值的最大误差在 1e-6 量级,远小于 ramp 本身的 1/65535 量化步长,肉眼看不出差别。
+    /// </summary>
+    private static double LinearToSrgbFast(double v)
+    {
+        if (v <= 0) return 0;
+        if (v >= 1) return 1;
+        double x = v * (LinSrgbLutSize - 1);
+        int i = (int)x;
+        double a = LinearToSrgbLut[i];
+        double f = x - i;
+        return f <= 0 ? a : a + (LinearToSrgbLut[i + 1] - a) * f;
+    }
 
     public void RefreshMonitors()
     {
@@ -148,6 +187,43 @@ public sealed class GammaController : IDisposable
     }
 
     /// <summary>
+    /// 探一次「gamma 写入到底被不被系统接受」:把刚读到的原始 LUT <b>原样写回去</b>再读回来比对。
+    /// <para>
+    /// 写回的就是此刻正在生效的那份值,所以不会破坏显示器已校准的曲线(也正因如此才敢在启动时直接调);
+    /// 而远程桌面一类环境是<b>静默</b>拒绝写入的 —— <c>SetDeviceGammaRamp</c> 的返回值本身就不可靠,
+    /// 只有读回来比对才知道。探明白之后,<see cref="LastApplySucceeded"/> 才能在第一帧就是可信的。
+    /// </para>
+    /// </summary>
+    public bool ProbeWritable()
+    {
+        if (Monitors.Count == 0)
+        {
+            LastApplySucceeded = false;
+            return false;
+        }
+
+        bool allOk = true;
+        foreach (var m in Monitors)
+        {
+            if (!m.OriginalSaved)
+            {
+                allOk = false;
+                continue;
+            }
+            var r = new GammaNative.RAMP { Red = m.OriginalRed!, Green = m.OriginalGreen!, Blue = m.OriginalBlue! };
+            bool ok = GammaNative.SetDeviceGammaRamp(m.Dc, ref r);
+            if (ok) ok = Verify(m, r);
+            if (ok) m.LastWritten = r;
+            if (!ok) allOk = false;
+        }
+
+        LastApplySucceeded = allOk;
+        _loggedGammaState = allOk;
+        Logger.Info(allOk ? "gamma 探针:写入可用" : "gamma 探针:写入被系统拒绝,启用遮罩兜底");
+        return allOk;
+    }
+
+    /// <summary>
     /// 感知柔和版:Bradford 色适应变换 + sRGB 感知编码。
     /// 在线性光空间把 D65 白点整体适配到目标色温的黑体轨迹白点,
     /// 灰阶保持"干净的暖灰"(不发黄发脏),明暗分布与对比不受影响。
@@ -159,32 +235,74 @@ public sealed class GammaController : IDisposable
         return ApplyGains(kr, kg, kb, brightness);
     }
 
-    /// <summary>按任意通道增益应用滤光(绿模式与色温模式共用的底层)</summary>
-    public bool ApplyGains(double kr, double kg, double kb, double brightness)
+    /// <summary>
+    /// 按任意通道增益应用滤光(绿模式与色温模式共用的底层)。
+    /// </summary>
+    /// <param name="verify">
+    /// 写完后读回来比对。每帧都做等于每帧多一次驱动往返,过渡期间只在首帧与落定帧开,
+    /// 周期重应用 / 前台切换 / 显示器变化这些"低频但要求结论可靠"的路径一律开。
+    /// </param>
+    /// <param name="forceWrite">
+    /// 即使与上次写入的值完全一致也重写。周期重应用<b>必须</b>为 true ——
+    /// 它的意义正是"锁屏 / 全屏独占程序把 LUT 冲掉了,再写回去",被去重挡掉这条保护就形同虚设。
+    /// </param>
+    public bool ApplyGains(double kr, double kg, double kb, double brightness,
+                           bool verify = true, bool forceWrite = false)
     {
-        bool allOk = Monitors.Count > 0;
+        if (Monitors.Count == 0)
+        {
+            if (verify) LastApplySucceeded = false;
+            return false;
+        }
+
+        var ramp = BuildRamp(kr, kg, kb, brightness);
+        bool allOk = true;
+
         foreach (var mon in Monitors)
         {
-            var ramp = new GammaNative.RAMP();
-            for (int i = 0; i < 256; i++)
-            {
-                double lin = SrgbToLinear(i / 255.0) * brightness;
-                ramp.Red[i] = ToRamp(LinearToSrgb(Clamp01(lin * kr)));
-                ramp.Green[i] = ToRamp(LinearToSrgb(Clamp01(lin * kg)));
-                ramp.Blue[i] = ToRamp(LinearToSrgb(Clamp01(lin * kb)));
-            }
+            // 与上次写进去的完全一致:跳过。过渡收尾那几帧的差异小到 ramp 一模一样,
+            // 没必要为它再付一次驱动往返(SET + GET)。
+            if (!forceWrite && !verify && mon.LastWritten.HasValue && RampEquals(mon.LastWritten.Value, ramp))
+                continue;
+
             bool ok = GammaNative.SetDeviceGammaRamp(mon.Dc, ref ramp);
-            if (ok) ok = Verify(mon, ramp);
+            mon.LastWritten = ramp;
+            if (ok && verify) ok = Verify(mon, ramp);
             if (!ok) allOk = false;
         }
 
-        LastApplySucceeded = allOk;
-        if (allOk != _loggedGammaState)
+        if (verify)
         {
-            _loggedGammaState = allOk;
-            Logger.Info(allOk ? "gamma 写入恢复正常" : "gamma 写入被系统拒绝,启用遮罩兜底");
+            LastApplySucceeded = allOk;
+            if (allOk != _loggedGammaState)
+            {
+                _loggedGammaState = allOk;
+                Logger.Info(allOk ? "gamma 写入恢复正常" : "gamma 写入被系统拒绝,启用遮罩兜底");
+            }
         }
         return allOk;
+    }
+
+    /// <summary>按通道增益 + 亮度构建 256 级 ramp(不含任何超越函数调用,见上面的查表)</summary>
+    private static GammaNative.RAMP BuildRamp(double kr, double kg, double kb, double brightness)
+    {
+        var ramp = new GammaNative.RAMP();
+        for (int i = 0; i < 256; i++)
+        {
+            double lin = SrgbToLinearLut[i] * brightness;
+            ramp.Red[i] = ToRamp(LinearToSrgbFast(lin * kr));
+            ramp.Green[i] = ToRamp(LinearToSrgbFast(lin * kg));
+            ramp.Blue[i] = ToRamp(LinearToSrgbFast(lin * kb));
+        }
+        return ramp;
+    }
+
+    private static bool RampEquals(GammaNative.RAMP a, GammaNative.RAMP b)
+    {
+        for (int i = 0; i < 256; i++)
+            if (a.Red[i] != b.Red[i] || a.Green[i] != b.Green[i] || a.Blue[i] != b.Blue[i])
+                return false;
+        return true;
     }
 
     private static double Clamp01(double v) => Math.Clamp(v, 0, 1);

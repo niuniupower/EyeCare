@@ -6,14 +6,26 @@ namespace EyeCare.Core;
 
 /// <summary>
 /// 滤光总控:伽马优先,遮罩兜底;含定时模式与显示器/电源/前台窗口变化自动重应用。
-/// 所有色调变化均以 ~0.9 秒缓动过渡(参考 f.lux / LightBulb 的平滑过渡设计),
-/// 避免瞬间跳变带来的视觉不适。
+/// 色调变化以「一阶迟滞」跟随目标(参考 f.lux / LightBulb 的平滑过渡设计),避免瞬间跳变带来的视觉不适:
+/// 开关键与模式切换 τ=250ms(约 0.9 秒内视觉到位),拖滑杆 τ=40ms(跟手)。
+/// 选一阶迟滞而不是"起点→终点缓动曲线",是因为后者在目标被连续改写时(拖动滑杆)会一直重排、追不上手指。
 /// 前台窗口切换时立即重写 gamma(参考 LightBulb GammaService:全屏应用切换会重置 LUT)。
 /// </summary>
 public sealed class FilterEngine : IDisposable
 {
-    // 过渡时长(毫秒)。滑块拖动与开关、模式切换统一使用。
-    private const int TransitionMs = 900;
+    // ── 过渡模型:一阶迟滞(指数跟随)──
+    // 每帧按"实际经过的时间"把当前值朝目标推进固定比例,由时间常数 τ 决定快慢。
+    // 相比「起点→终点 + 缓动曲线」,它有一个决定性的好处:**目标中途改变时不需要重排动画**。
+    // 原先每次取值变化都要 _from = 当前值、把计时归零,而缓动曲线起点速度为零 ——
+    // 拖滑杆时取值每 16ms 变一次,等于每帧都把速度打回 0,画面就一直挪不动。
+    // 一阶迟滞天然处理重定目标:滞后量≈τ×目标速度,与取值频率无关。
+    //
+    // τ 分两档:开关 / 模式切换要舒缓(约 0.9 秒在视觉上到位,避免瞬间跳变的不适),
+    // 拖滑杆要跟手(滞后约 40ms,肉眼视为实时,又不像硬跳变那样刺眼)。
+    private const double ComfortTauMs = 250;
+    private const double LiveTauMs = 40;
+    /// <summary>与目标差距小于此值即视为到位(线性光量级:远小于 ramp 的 1/65535 量化步长)</summary>
+    private const double SettleEpsilon = 0.0008;
     private const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
     private const uint WINEVENT_OUTOFCONTEXT = 0x0000;
 
@@ -41,13 +53,19 @@ public sealed class FilterEngine : IDisposable
     private readonly IntPtr _foregroundHook;
     private readonly WinEventDelegate _foregroundHookProc; // 防 GC 回收
     private DateTime _lastForegroundApply = DateTime.MinValue;
+    /// <summary>跟随档日志限流用(拖滑杆会 60Hz 触发,不能每次都落盘)</summary>
+    private DateTime _lastLiveLog = DateTime.MinValue;
     private string _lastKey = "";
 
     // 屏幕当前实际状态(线性光空间);过渡即在这组值与目标值之间插值
     private (double kr, double kg, double kb, double bright) _current = (1, 1, 1, 1);
     private (double kr, double kg, double kb, double bright) _target = (1, 1, 1, 1);
-    private (double kr, double kg, double kb, double bright) _from = (1, 1, 1, 1);
-    private DateTime _transitionStart = DateTime.UtcNow;
+    /// <summary>上一帧时刻:按"实际经过的时间"推进,掉帧时不会走得太慢</summary>
+    private DateTime _lastTick = DateTime.UtcNow;
+    /// <summary>本轮过渡的时间常数(毫秒)。拖滑杆用 LiveTauMs,其余场景用 ComfortTauMs</summary>
+    private double _tauMs = ComfortTauMs;
+    /// <summary>本轮过渡是否还要做一次"写入是否真生效"的校验(见 ApplyCurrentToHardware)</summary>
+    private bool _verifyNextWrite = true;
     private double _dimAlphaTarget;
 
     public FilterEngine(AppSettings settings)
@@ -57,7 +75,7 @@ public sealed class FilterEngine : IDisposable
 
         // 周期性重应用:锁屏/安全桌面/部分游戏会重置 gamma LUT(直接写当前值,不做过渡)
         _reapply = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
-        _reapply.Tick += (_, _) => ApplyCurrentToHardware();
+        _reapply.Tick += (_, _) => ApplyCurrentToHardware(verify: true, forceWrite: true);
 
         _schedule = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
         _schedule.Tick += (_, _) => Apply();
@@ -91,13 +109,16 @@ public sealed class FilterEngine : IDisposable
         var now = DateTime.UtcNow;
         if ((now - _lastForegroundApply).TotalMilliseconds < 200) return;
         _lastForegroundApply = now;
-        ApplyCurrentToHardware();
+        ApplyCurrentToHardware(verify: true, forceWrite: true);
     }
 
     public void Start()
     {
         _reapply.Start();
         _schedule.Start();
+        // 先探一次「gamma 写入到底被不被系统接受」:远程桌面一类环境是静默拒绝的,
+        // 而遮罩兜底必须在第一次 Apply() 里就决定开不开,不能等过渡跑完才发现(那要 900ms)。
+        _gamma.ProbeWritable();
         Apply(force: true);
     }
 
@@ -108,13 +129,22 @@ public sealed class FilterEngine : IDisposable
         if (msg is WM_DISPLAYCHANGE or WM_POWERBROADCAST)
         {
             _gamma.RefreshMonitors();
-            ApplyCurrentToHardware();
+            ApplyCurrentToHardware(verify: true, forceWrite: true);
         }
         return IntPtr.Zero;
     }
 
     /// <summary>计算目标状态并发起平滑过渡。force=true 时即使设置未变也重新过渡。</summary>
-    public void Apply(bool force = false)
+    public void Apply(bool force = false) => ApplyCore(force, ComfortTauMs);
+
+    /// <summary>
+    /// 拖动滑杆时的实时应用:一阶迟滞的时间常数取 40ms(≈ 2~3 帧内跟上)。
+    /// 之所以不干脆"立即写死"——那样每一格都是硬跳变,拖快了会一顿一顿的;
+    /// 40ms 的跟随在感官上等同于实时,又能把跳变磨平。
+    /// </summary>
+    public void ApplyLive() => ApplyCore(true, LiveTauMs);
+
+    private void ApplyCore(bool force, double tauMs)
     {
         EvaluateSchedule();
         string key = $"{_settings.FilterEnabled}|{_settings.FilterMode}|{_settings.ColorTemperature}|{_settings.Brightness}|{_settings.ScheduleActive}|{_settings.GreenStrength}";
@@ -173,8 +203,20 @@ public sealed class FilterEngine : IDisposable
         }
 
         _target = (gains.kr, gains.kg, gains.kb, gammaDim);
-        BeginTransition();
-        Logger.Info($"滤光: {modeDesc} 亮度{brightness * 100:0}% (平滑过渡 {TransitionMs}ms)");
+        BeginTransition(tauMs);
+        LogApply(modeDesc, brightness, tauMs);
+    }
+
+    /// <summary>
+    /// 拖滑杆时本方法会以 ~60Hz 被调用,每次都写日志等于每秒 60 次磁盘 I/O,还会把 log.txt 冲爆;
+    /// 跟随档限流到每秒一条(舒缓档照常记录)。Logger 是 File.AppendAllText,不是免费的。
+    /// </summary>
+    private void LogApply(string modeDesc, double brightness, double tauMs)
+    {
+        var now = DateTime.UtcNow;
+        if (tauMs <= LiveTauMs && (now - _lastLiveLog).TotalSeconds < 1) return;
+        _lastLiveLog = now;
+        Logger.Info($"滤光: {modeDesc} 亮度{brightness * 100:0}% (一阶跟随 τ={tauMs:0}ms)");
     }
 
     /// <summary>判断 gamma 通道是否可用:校验显示器句柄存在且此前写入成功过</summary>
@@ -184,51 +226,67 @@ public sealed class FilterEngine : IDisposable
         return _gamma.LastApplySucceeded;
     }
 
-    private void BeginTransition()
+    private void BeginTransition(double tauMs)
     {
-        _from = _current;
-        _transitionStart = DateTime.UtcNow;
+        _tauMs = tauMs;
+        _lastTick = DateTime.UtcNow;
+        // 本轮过渡的第一帧要校验一次「写进去的值是否真的生效」:
+        // 远程桌面等环境会静默拒绝 gamma 写入,只有读回来比对才知道。
+        // 逐帧校验太贵(每帧一次驱动往返),而首帧校验一次就足以判定环境是否可用。
+        _verifyNextWrite = true;
         _transition.Start();
     }
 
     private void TransitionTick(object? sender, EventArgs e)
     {
-        double t = (DateTime.UtcNow - _transitionStart).TotalMilliseconds / TransitionMs;
-        if (t >= 1)
+        var now = DateTime.UtcNow;
+        double dtMs = Math.Max(1.0, (now - _lastTick).TotalMilliseconds);
+        _lastTick = now;
+
+        // 一阶迟滞:本帧朝目标推进的固定比例。用"实际经过的时间"而不是定时器的标称间隔,
+        // 掉帧(拖动时很常见)时不会走得比预期慢。
+        double k = 1 - Math.Exp(-dtMs / _tauMs);
+        _current = (Lerp(_current.kr, _target.kr, k),
+                    Lerp(_current.kg, _target.kg, k),
+                    Lerp(_current.kb, _target.kb, k),
+                    Lerp(_current.bright, _target.bright, k));
+
+        bool final = MaxGap(_current, _target) <= SettleEpsilon;
+        if (final)
         {
-            _current = _target;
+            _current = _target;      // 指数衰减永远到不了目标,最后一步直接吸附
             _transition.Stop();
         }
-        else
-        {
-            double eased = SmoothStep(t);
-            _current = (Lerp(_from.kr, _target.kr, eased),
-                        Lerp(_from.kg, _target.kg, eased),
-                        Lerp(_from.kb, _target.kb, eased),
-                        Lerp(_from.bright, _target.bright, eased));
-        }
-        ApplyCurrentToHardware();
+        // 落定的那一帧再校验一次:此时写的正好是最终值,能确认"最终状态"确实生效了
+        ApplyCurrentToHardware(verify: _verifyNextWrite || final);
+        _verifyNextWrite = false;
 
-        if (!_transition.IsEnabled && !_settings.FilterEnabled)
+        if (final && !_settings.FilterEnabled)
             _gamma.RestoreAll(); // 过渡到恒等后,一次性还原校准过的原始 LUT
     }
 
-    /// <summary>把当前插值状态写入显卡(无过渡,过渡循环与周期重应用共用)</summary>
-    private void ApplyCurrentToHardware()
+    private static double MaxGap((double kr, double kg, double kb, double bright) a,
+                                 (double kr, double kg, double kb, double bright) b) =>
+        Math.Max(Math.Max(Math.Abs(a.kr - b.kr), Math.Abs(a.kg - b.kg)),
+                 Math.Max(Math.Abs(a.kb - b.kb), Math.Abs(a.bright - b.bright)));
+
+    /// <summary>
+    /// 把当前插值状态写入显卡(无过渡,过渡循环与周期重应用共用)。
+    /// <para>
+    /// <paramref name="verify"/> = 写完后读回来比对(每帧都做等于每帧多一次驱动往返,拖滑杆时很贵);
+    /// <paramref name="forceWrite"/> = 即使与上次写入的值完全相同也重写 —— 周期重应用必须为 true,
+    /// 因为它的意义正是"锁屏/全屏游戏把 LUT 冲掉了,再写回去",被去重挡掉就失效了。
+    /// </para>
+    /// </summary>
+    private void ApplyCurrentToHardware(bool verify = false, bool forceWrite = false)
     {
         if (_settings.FilterEnabled || _current != (1, 1, 1, 1))
-            _gamma.ApplyGains(_current.kr, _current.kg, _current.kb, _current.bright);
+            _gamma.ApplyGains(_current.kr, _current.kg, _current.kb, _current.bright, verify, forceWrite);
         else
             _gamma.RestoreAll();
     }
 
     private static double Lerp(double a, double b, double t) => a + (b - a) * t;
-
-    private static double SmoothStep(double t)
-    {
-        t = Math.Clamp(t, 0, 1);
-        return t * t * (3 - 2 * t);
-    }
 
     private void EvaluateSchedule()
     {
