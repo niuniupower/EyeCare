@@ -18,6 +18,7 @@ public sealed class TrayService : IDisposable
     private readonly ToolStripMenuItem _miAutoStart;
     private readonly ToolStripMenuItem _miTempMenu;
     private Icon _currentIcon;
+    private bool _currentState;
 
     public event Action? OpenSettings;
     public event Action? BreakNow;
@@ -29,7 +30,8 @@ public sealed class TrayService : IDisposable
     public TrayService(AppSettings settings)
     {
         _settings = settings;
-        _currentIcon = MakeIcon(settings.FilterEnabled);
+        _currentState = settings.FilterEnabled;
+        _currentIcon = MakeIcon(_currentState);
 
         _icon = new NotifyIcon
         {
@@ -142,6 +144,18 @@ public sealed class TrayService : IDisposable
         foreach (ToolStripMenuItem it in _miTempMenu.DropDownItems)
             it.Checked = settings.FilterMode == "temperature" && (double)it.Tag! == settings.ColorTemperature;
 
+        // 图标随滤光开关变色(彩色=开启 / 灰度=关闭)。
+        // 早期版本只在构造时画一次图标,注释里写的"状态变色"其实从未生效。
+        if (settings.FilterEnabled != _currentState)
+        {
+            _currentState = settings.FilterEnabled;
+            var next = MakeIcon(_currentState);
+            var old = _currentIcon;
+            _icon.Icon = next;
+            _currentIcon = next;
+            old.Dispose();   // Icon.Dispose 内部会 DestroyIcon
+        }
+
         string tip = $"暮瞳 DuskEye · 滤光{(settings.FilterEnabled ? "开" : "关")}\n{status}";
         if (_icon.Text != tip && tip.Length <= 63)
             _icon.Text = tip;
@@ -154,8 +168,56 @@ public sealed class TrayService : IDisposable
         _icon.ShowBalloonTip(4000);
     }
 
-    /// <summary>托盘图标:与主图标同源的「D」花押;滤光开启=琥珀渐变,关闭=灰色</summary>
+    /// <summary>
+    /// 托盘图标:AI 生成的品牌图标(Assets/tray.png,通义万相按品牌提示词生成:
+    /// 曜石黑圆角底 + 暮色之眼 + 新月瞳 + 琥珀渐变)。滤光开启=彩色,关闭=去饱和灰度。
+    /// 资源读取失败时退回代码绘制的旧图标,保证托盘永远有图标。
+    /// </summary>
     private static Icon MakeIcon(bool filterOn)
+    {
+        try
+        {
+            var sri = System.Windows.Application.GetResourceStream(
+                new Uri("pack://application:,,,/Assets/tray.png"));
+            using var src = new Bitmap(sri.Stream);
+            using var bmp = new Bitmap(32, 32);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+                var rect = new Rectangle(0, 0, 32, 32);
+                if (filterOn)
+                {
+                    g.DrawImage(src, rect);
+                }
+                else
+                {
+                    // 关闭态:亮度加权去饱和,琥珀月牙变灰月牙,形状不变
+                    var gray = new System.Drawing.Imaging.ColorMatrix(new[]
+                    {
+                        new float[] { 0.299f, 0.299f, 0.299f, 0, 0 },
+                        new float[] { 0.587f, 0.587f, 0.587f, 0, 0 },
+                        new float[] { 0.114f, 0.114f, 0.114f, 0, 0 },
+                        new float[] { 0, 0, 0, 1, 0 },
+                        new float[] { 0, 0, 0, 0, 1 },
+                    });
+                    using var attr = new System.Drawing.Imaging.ImageAttributes();
+                    attr.SetColorMatrix(gray);
+                    g.DrawImage(src, rect, 0, 0, src.Width, src.Height, GraphicsUnit.Pixel, attr);
+                }
+            }
+            return Icon.FromHandle(bmp.GetHicon());
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("加载托盘图标资源失败,退回代码绘制: " + ex.Message);
+            return MakeIconLegacy(filterOn);
+        }
+    }
+
+    /// <summary>旧版兜底:纯 GDI 绘制的「D」花押(仅当 Assets/tray.png 读不到时使用)</summary>
+    private static Icon MakeIconLegacy(bool filterOn)
     {
         using var bmp = new Bitmap(32, 32);
         using (var g = Graphics.FromImage(bmp))

@@ -9,7 +9,7 @@
     <Nullable>enable</Nullable>
     <RootNamespace>EyeCare</RootNamespace>
     <AssemblyName>EyeCare</AssemblyName>
-    <Version>1.7.2</Version>
+    <Version>1.7.3</Version>
     <Product>暮瞳 DuskEye</Product>
     <Description>免费本地护眼工具:蓝光过滤、屏幕调光、休息提醒。完全离线,数据自主可控。</Description>
     <ApplicationIcon>Assets\icon.ico</ApplicationIcon>
@@ -17,5 +17,10 @@
     <DebugType>embedded</DebugType>
     <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 托盘图标(AI 生成,见 TrayService.MakeIcon):pack URI 加载,必须显式声明为 Resource -->
+    <Resource Include="Assets\tray.png" />
+  </ItemGroup>
 
 </Project>
