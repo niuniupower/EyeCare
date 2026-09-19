@@ -113,12 +113,12 @@ dotnet publish -c Release -r win-x64 --self-contained true `
   -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o ..\..\dist
 ```
 
-图标重新生成:`powershell -File scripts\make-icon.ps1`(暮色底 + 「D」花押负空间新月 + 暮星;
-托盘小尺寸自动退化为圆孔负空间,保证 16px 可读)。
-**托盘图标已换成 AI 生成的品牌图标**(`Assets/tray.png`):用通义万相按品牌提示词生成
+**应用图标与托盘图标已统一为 AI 生成的品牌设计**:用通义万相按品牌提示词生成
 ——「曜石黑圆角底 + 暮色之眼,瞳孔是一弯琥珀金到落日橙渐变的新月,右上角一颗四角暮星,
-扁平矢量风格」——再经圆角 alpha 蒙版裁切为 256px。滤光关闭时在运行时按亮度去饱和为灰度
-(`TrayService.MakeIcon`);资源读不到时自动退回旧版代码绘制的「D」花押。
+扁平矢量风格」——再经圆角 alpha 蒙版裁切:
+`Assets/icon.ico`(exe/窗口图标,内嵌 16–256 十档尺寸)与 `Assets/tray.png`(托盘,256px)同源。
+托盘在滤光关闭时按亮度去饱和为灰度(`TrayService.MakeIcon`),资源读不到时退回旧版代码绘制的
+「D」花押。`scripts/make-icon.ps1`(「D」花押生成脚本)保留作为旧版方案。
 
 ## 项目结构
 
