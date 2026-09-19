@@ -59,18 +59,14 @@
                         </Grid.RowDefinitions>
 
                         <StackPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="20,0,0,0">
-                            <Border Width="38" Height="38" CornerRadius="12" Background="{StaticResource BrandTileBg}">
+                            <!-- 品牌 Logo:与 exe/托盘同源的 AI 生成图标(Assets/tray.png),
+                                 旧「D」花押矢量已退役 —— 品牌资产只有一份,不会再出现两套设计 -->
+                            <Border Width="38" Height="38" Background="Transparent">
                                 <Border.Effect>
                                     <DropShadowEffect Color="#FFFFB84D" BlurRadius="14" ShadowDepth="0" Opacity="0.28"/>
                                 </Border.Effect>
-                                <Grid>
-                                    <!-- 「D」花押:负空间为一弯新月,与图标同源(StreamGeometry 默认 EvenOdd) -->
-                                    <Path Fill="{StaticResource BrandGlyph}"
-                                          Data="M 9.9 9.1 C 12.6 7.9, 16.8 7.7, 20.5 9.4 A 9.65 9.65 0 0 1 20.5 28.6 C 16.8 30.3, 12.6 30.1, 9.9 28.3 C 9.0 22.1, 9.0 15.3, 9.9 9.1 Z M 17.4 12.9 A 6.83 6.83 0 1 1 17.4 25.1 A 6.24 6.24 0 1 0 17.4 12.9 Z"/>
-                                    <!-- 暮星 -->
-                                    <Path Fill="#F2FFE7B0"
-                                          Data="M 29.1 4.1 L 29.7 5.6 L 31.2 6.2 L 29.7 6.8 L 29.1 8.3 L 28.5 6.8 L 27.0 6.2 L 28.5 5.6 Z"/>
-                                </Grid>
+                                <Image Source="/Assets/tray.png" Width="38" Height="38"
+                                       RenderOptions.BitmapScalingMode="HighQuality"/>
                             </Border>
                             <StackPanel Margin="11,0,0,0" VerticalAlignment="Center">
                                 <TextBlock Text="暮瞳" FontSize="15" FontWeight="Bold" Foreground="{StaticResource Text}"/>

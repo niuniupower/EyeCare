@@ -23,16 +23,8 @@
         <GradientStop Color="#FFFFB84D" Offset="0.55"/>
         <GradientStop Color="#FFFF8A3E" Offset="1"/>
     </LinearGradientBrush>
-    <!-- 品牌花押:暮色底 + 字形渐变(与应用图标同源) -->
-    <LinearGradientBrush x:Key="BrandTileBg" StartPoint="0,0" EndPoint="1,1">
-        <GradientStop Color="#FF171225" Offset="0"/>
-        <GradientStop Color="#FF0B0C10" Offset="1"/>
-    </LinearGradientBrush>
-    <LinearGradientBrush x:Key="BrandGlyph" StartPoint="0,0" EndPoint="0,1">
-        <GradientStop Color="#FFFFF3D9" Offset="0"/>
-        <GradientStop Color="#FFFFC46A" Offset="0.45"/>
-        <GradientStop Color="#FFFF8A3D" Offset="1"/>
-    </LinearGradientBrush>
+    <!-- 品牌花押资源已退役:界面 Logo 与 exe/托盘图标统一为 Assets/tray.png(AI 生成)。
+         旧「D」花押如需找回,见 git 历史或 scripts/make-icon.ps1。 -->
     <LinearGradientBrush x:Key="WindowBackground" StartPoint="0,0" EndPoint="1,1">
         <GradientStop Color="#FF141726" Offset="0"/>
         <GradientStop Color="#FF0E0F16" Offset="0.45"/>
